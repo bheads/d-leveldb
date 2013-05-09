@@ -13,7 +13,7 @@ private import deimos.leveldb.leveldb;
 class DB
 {
 private:
-    leveldb_t* _db;
+    leveldb_t _db;
 
 public:
     this()
@@ -93,11 +93,11 @@ public:
     {
         char* errptr;
         if(isOpen)
-            leveldb_write(_db, opt.ptr, cast(leveldb_writebatch_t*)batch.ptr, &errptr);
+            leveldb_write(_db, opt.ptr, cast(leveldb_writebatch_t)batch.ptr, &errptr);
         return Status(errptr);
     }
 
-    @property Snapshot getSnapshot()
+    @property ASnapshot getSnapshot()
     {
         return new Snapshot();
     }
@@ -115,18 +115,17 @@ public:
     class Snapshot : ASnapshot
     {
     private:
-        leveldb_snapshot_t* _snap;
+        leveldb_snapshot_t _snap;
 
-    package:
-        @property leveldb_snapshot_t* ptr()
+    public:
+        @property override const const(leveldb_snapshot_t) ptr()
         {
             return _snap;
         }
 
-    public:
         this()
         {
-            if((_snap = cast(leveldb_snapshot_t*)leveldb_create_snapshot(_db)) is null)
+            if((_snap = cast(leveldb_snapshot_t)leveldb_create_snapshot(_db)) is null)
                 throw new Exception("Failed to create snapshot");
         }
 
@@ -150,10 +149,10 @@ public:
     class Iterator
     {
     private:
-        leveldb_iterator_t* _iter;
+        leveldb_iterator_t _iter;
 
     package:
-        @property const const(leveldb_iterator_t*) ptr()
+        @property const const(leveldb_iterator_t) ptr()
         {
             return _iter;
         }
@@ -285,10 +284,10 @@ public:
 class WriteBatch
 {
 private:
-    leveldb_writebatch_t* _ptr;
+    leveldb_writebatch_t _ptr;
 
 package:
-    @property const const(leveldb_writebatch_t*) ptr()
+    @property const const(leveldb_writebatch_t) ptr()
     {
         return _ptr;
     }

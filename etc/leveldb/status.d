@@ -2,6 +2,8 @@ module etc.leveldb.status;
 
 private import std.conv : to;
 
+private import deimos.leveldb.leveldb;
+
 struct Status
 {
 private:
@@ -15,6 +17,7 @@ public:
         {
             _ok = false;
             msg = to!string(errptr);
+            leveldb_free(errptr);
         }
         else
         {

@@ -9,7 +9,20 @@
     "dependencies": {
         "leveldb" : "~master"
     },
-    "importPaths": ["."],
-    "targetType" : "library",
-    "sourcePaths" : [ "./etc" ]
+
+    "configurations" : [
+        {
+            "name" : "lib",
+            "importPaths": ["."],
+            "targetType" : "library",
+            "sourcePaths" : [ "./etc", "deimos" ],
+        },
+        {
+            "name" : "test",
+            "dflags" : ["-debug", "-unittest"],
+            "importPaths": ["."],
+            "targetType" : "executable",
+            "sourcePaths" : [ "./etc", "./test" ],
+        }
+    ]
 }

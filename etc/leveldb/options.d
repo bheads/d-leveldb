@@ -17,7 +17,7 @@ static this()
 class Options
 {
 private:
-    leveldb_options_t* _opt;
+    leveldb_options_t _opt;
 
     Environment _env;
     Cache _cache;
@@ -25,7 +25,7 @@ private:
     Comparator _comparator;
 
 package:
-    @property const const(leveldb_options_t*) ptr()
+    @property const const(leveldb_options_t) ptr()
     {
         return _opt;
     }
@@ -163,7 +163,7 @@ public:
     static class Environment
     {
     private:
-        leveldb_env_t* _env;
+        leveldb_env_t _env;
 
     public:
         this()
@@ -180,14 +180,14 @@ public:
 
     abstract static class Cache
     {
-        @property leveldb_cache_t* ptr();
+        @property leveldb_cache_t ptr();
     }
 
     /// Cache Object, can only set size
     static class LRUCache : Cache
     {
     private:
-        leveldb_cache_t* _cache;
+        leveldb_cache_t _cache;
 
     public:
 
@@ -208,7 +208,7 @@ public:
             leveldb_cache_destroy(_cache);
         }
 
-        @property override leveldb_cache_t* ptr()
+        @property override leveldb_cache_t ptr()
         {
             return _cache;
         }
@@ -216,14 +216,14 @@ public:
 
     abstract static class FilterPolicy
     {
-        @property leveldb_filterpolicy_t* ptr();
+        @property leveldb_filterpolicy_t ptr();
     }
 
     /// Bloom filter
     static class BloomFilterPolicy : FilterPolicy
     {
     private:
-        leveldb_filterpolicy_t* _filter;
+        leveldb_filterpolicy_t _filter;
 
     public:
 
@@ -244,7 +244,7 @@ public:
             leveldb_filterpolicy_destroy(_filter);
         }
 
-        @property override leveldb_filterpolicy_t* ptr()
+        @property override leveldb_filterpolicy_t ptr()
         {
             return _filter;
         }
@@ -254,7 +254,7 @@ public:
     abstract static class AFilterPolicy : FilterPolicy
     {
     private:
-        leveldb_filterpolicy_t* _filter;
+        leveldb_filterpolicy_t _filter;
 
     public:
 
@@ -276,7 +276,7 @@ public:
         ubyte match(const char[]key, const char[] filter);
         string name();
 
-        @property override leveldb_filterpolicy_t* ptr()
+        @property override leveldb_filterpolicy_t ptr()
         {
             return _filter;
         }
@@ -286,7 +286,7 @@ public:
     static class Comparator
     {
     private:
-        leveldb_comparator_t* _comp;
+        leveldb_comparator_t _comp;
 
     public:
 
@@ -319,17 +319,17 @@ public:
 
 package abstract class ASnapshot
 {
-    package:
-        @property const const(leveldb_snapshot_t*) ptr();
+public:
+    @property const const(leveldb_snapshot_t) ptr();
 }
 
 class ReadOptions
 {
 private:
-    leveldb_readoptions_t* _opt;
+    leveldb_readoptions_t _opt;
 
 package:
-    @property const const(leveldb_readoptions_t*) ptr()
+    @property const const(leveldb_readoptions_t) ptr()
     {
         return _opt;
     }
@@ -367,7 +367,7 @@ public:
             leveldb_readoptions_set_fill_cache(_opt, val);
     }
 
-    @property void snapshot(ASnapshot snapshot)
+    @property void snapshot(const ASnapshot snapshot)
     {
         if(valid)
             leveldb_readoptions_set_snapshot(_opt, snapshot.ptr);
@@ -383,10 +383,10 @@ public:
 class WriteOptions
 {
 private:
-    leveldb_writeoptions_t* _opt;
+    leveldb_writeoptions_t _opt;
 
 package:
-    @property const const(leveldb_writeoptions_t*) ptr()
+    @property const const(leveldb_writeoptions_t) ptr()
     {
         return _opt;
     }
@@ -452,8 +452,8 @@ extern(C):
         f.destructor();
     }
 
-    char* filterCreate(void* state, const const(char)* key_array, const size_t* key_length_array, 
-        int num_keys, size_t* filter_length)
+    char* filterCreate(void* state, const const(char)* key_array, 
+        const size_t* key_length_array, int num_keys, size_t* filter_length)
     {
         auto f = cast(Options.AFilterPolicy*)state;
         return f.create(key_array, key_length_array, num_keys, filter_length);
