@@ -1,0 +1,14 @@
+{
+"Version": 1,
+"Files": {
+	"C/": "Directory",
+	"package.json": "RegularFile",
+	"C/LICENSE": "RegularFile",
+	"C/c.h": "RegularFile",
+	"deimos/leveldb/leveldb.d": "RegularFile",
+	"deimos/": "Directory",
+	"README.md": "RegularFile",
+	"deimos/leveldb/": "Directory",
+	"journal.json": "RegularFile"
+}
+}

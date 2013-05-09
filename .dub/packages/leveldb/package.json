@@ -1,0 +1,20 @@
+{
+"description": "LevelDB is a fast key-value storage library written at Google that provides an ordered mapping from string keys to string values.",
+"authors": [
+	"Byron Heads"
+],
+"libs-posix": [
+	"leveldb"
+],
+"version": "~master",
+"importPaths": [
+	"."
+],
+"homepage": "https://code.google.com/p/leveldb/",
+"name": "leveldb",
+"copyright": "Copyright © 2011 The LevelDB Authors. All rights reserved.",
+"targetType": "sourceLibrary",
+"sourcePaths": [
+	"./deimos"
+]
+}
