@@ -3,10 +3,12 @@ module etc.leveldb.options;
 private import std.algorithm : cmp;
 private import std.string : toStringz;
 
+private import etc.leveldb.exceptions;
+
 private import deimos.leveldb.leveldb;
 
-public __gshared const ReadOptions DefaultReadOptions;
-public __gshared const WriteOptions DefaultWriteOptions;
+public __gshared const(ReadOptions) DefaultReadOptions;
+public __gshared const(WriteOptions) DefaultWriteOptions;
 
 static this()
 {
@@ -25,7 +27,8 @@ private:
     Comparator _comparator;
 
 package:
-    @property const const(leveldb_options_t) ptr()
+    @property 
+    inout(leveldb_options_t) ptr() inout
     {
         return _opt;
     }
@@ -36,9 +39,7 @@ public:
     this()
     {
         if((_opt = leveldb_options_create()) is null)
-        {
-            throw new Exception("Failed to create an option");
-        }
+            throw new LeveldbException("Failed to create an option");
     }
 
     /// Destroy any valid option pointer
@@ -52,105 +53,98 @@ public:
         }
     }
 
-    @property void create_if_missing(bool val)
+    @property 
+    void create_if_missing(bool val)
     {
-        if(valid)
-            leveldb_options_set_create_if_missing(_opt, val);
+        leveldb_options_set_create_if_missing(_opt, val);
     }
 
-    @property void error_if_missing(bool val)
+    @property 
+    void error_if_missing(bool val)
     {
-        if(valid)
-            leveldb_options_set_error_if_exists(_opt, val);
+        leveldb_options_set_error_if_exists(_opt, val);
     }
 
-    @property void paranoid_checks(bool val)
+    @property
+    void paranoid_checks(bool val)
     {
-        if(valid)
-            leveldb_options_set_paranoid_checks(_opt, val);
+        leveldb_options_set_paranoid_checks(_opt, val);
     }
 
     /// leveldb_no_compression or leveldb_snappy_compression
-    @property void compression(int val)
+    @property
+    void compression(int val)
     {
-        if(valid)
-            leveldb_options_set_compression(_opt, val);
+        leveldb_options_set_compression(_opt, val);
     }
 
-    @property void write_buffer_size(size_t size)
+    @property
+    void write_buffer_size(size_t size)
     {
-        if(valid)
-            leveldb_options_set_write_buffer_size(_opt, size);
+        leveldb_options_set_write_buffer_size(_opt, size);
     }
 
-    @property void max_open_files(int val)
+    @property
+    void max_open_files(int val)
     {
-        if(valid)
-            leveldb_options_set_max_open_files(_opt, val);
+        leveldb_options_set_max_open_files(_opt, val);
     }
 
-    @property void block_size(size_t size)
+    @property
+    void block_size(size_t size)
     {
-        if(valid)
-            leveldb_options_set_block_size(_opt, size);
+        leveldb_options_set_block_size(_opt, size);
     }
 
-    @property void block_restart_interval(int val)
+    @property
+    void block_restart_interval(int val)
     {
-        if(valid)
-            leveldb_options_set_block_restart_interval(_opt, val);
+        leveldb_options_set_block_restart_interval(_opt, val);
     }
 
-    @property void env(Environment env)
+    @property
+    void env(Environment env)
     {
-        if(valid)
-        {
-            _env = env; // save pointer so gc doesn't collect it
-            if(env)
-                leveldb_options_set_env(_opt, env._env);
-            else
-                leveldb_options_set_env(_opt, null);
-        }
+        _env = env; // save pointer so gc doesn't collect it
+        if(env)
+            leveldb_options_set_env(_opt, env._env);
+        else
+            leveldb_options_set_env(_opt, null);
     }
 
-    @property void cache(Cache cache)
+    @property
+    void cache(Cache cache)
     {
-        if(valid)
-        {
-            _cache = cache; // save pointer so gc doesn't collect it
-            if(cache)
-                leveldb_options_set_cache(_opt, cache.ptr);
-            else
-                leveldb_options_set_cache(_opt, null);
-        }
+        _cache = cache; // save pointer so gc doesn't collect it
+        if(cache)
+            leveldb_options_set_cache(_opt, cache.ptr);
+        else
+            leveldb_options_set_cache(_opt, null);
     }
 
-    @property void filter_policy(FilterPolicy filter)
+    @property
+    void filter_policy(FilterPolicy filter)
     {
-        if(valid)
-        {
-            _filter = filter; // save pointer so gc doesn't collect it
-            if(filter)
-                leveldb_options_set_filter_policy(_opt, filter.ptr);
-            else
-                leveldb_options_set_filter_policy(_opt, null);
-        }
+        _filter = filter; // save pointer so gc doesn't collect it
+        if(filter)
+            leveldb_options_set_filter_policy(_opt, filter.ptr);
+        else
+            leveldb_options_set_filter_policy(_opt, null);
     }
 
-    @property void comparator(Comparator comparator)
+    @property
+    void comparator(Comparator comparator)
     {
-        if(valid)
-        {
-            _comparator = comparator; // save pointer so gc doesn't collect it
-            if(comparator)
-                leveldb_options_set_comparator(_opt, comparator._comp);
-            else
-                leveldb_options_set_comparator(_opt, null);
-        }
+        _comparator = comparator; // save pointer so gc doesn't collect it
+        if(comparator)
+            leveldb_options_set_comparator(_opt, comparator._comp);
+        else
+            leveldb_options_set_comparator(_opt, null);
     }
 
     /// indicates if the option has been created
-    @property bool valid()
+    @property 
+    bool valid() inout
     {
         return _opt !is null;
     }
@@ -169,7 +163,7 @@ public:
         this()
         {
             if((_env = leveldb_create_default_env()) is null)
-                throw new Exception("Failed to create leveldb environment");
+                throw new LeveldbException("Failed to create leveldb environment");
         }
 
         ~this()
@@ -180,7 +174,8 @@ public:
 
     abstract static class Cache
     {
-        @property leveldb_cache_t ptr();
+        @property 
+        inout(leveldb_cache_t) ptr() inout;
     }
 
     /// Cache Object, can only set size
@@ -200,7 +195,7 @@ public:
         this(size_t capacity)
         {
             if((_cache = leveldb_cache_create_lru(capacity)) is null)
-                throw new Exception("Failed to create leveldb cache");
+                throw new LeveldbException("Failed to create leveldb cache");
         }
 
         ~this()
@@ -208,7 +203,8 @@ public:
             leveldb_cache_destroy(_cache);
         }
 
-        @property override leveldb_cache_t ptr()
+        @property
+        override inout(leveldb_cache_t) ptr() inout
         {
             return _cache;
         }
@@ -216,7 +212,8 @@ public:
 
     abstract static class FilterPolicy
     {
-        @property leveldb_filterpolicy_t ptr();
+        @property
+        inout(leveldb_filterpolicy_t) ptr() inout;
     }
 
     /// Bloom filter
@@ -236,7 +233,7 @@ public:
         this(int bits_per_key)
         {
             if((_filter = leveldb_filterpolicy_create_bloom(bits_per_key)) is null)
-                throw new Exception("Failed to create leveldb bloom filter");
+                throw new LeveldbException("Failed to create leveldb bloom filter");
         }
 
         ~this()
@@ -244,7 +241,8 @@ public:
             leveldb_filterpolicy_destroy(_filter);
         }
 
-        @property override leveldb_filterpolicy_t ptr()
+        @property
+        override inout(leveldb_filterpolicy_t) ptr() inout
         {
             return _filter;
         }
@@ -262,7 +260,7 @@ public:
         {
             if((_filter = leveldb_filterpolicy_create(cast(void*)this,
                 &filterDestructor, &filterCreate, &filterKeyMayMatch, &filterName)) is null)
-                throw new Exception("Failed to create leveldb filter");
+                throw new LeveldbException("Failed to create leveldb filter");
         }
 
         ~this()
@@ -276,7 +274,8 @@ public:
         ubyte match(const char[]key, const char[] filter);
         string name();
 
-        @property override leveldb_filterpolicy_t ptr()
+        @property
+        override inout(leveldb_filterpolicy_t) ptr() inout
         {
             return _filter;
         }
@@ -294,7 +293,7 @@ public:
         {
             if((_comp = leveldb_comparator_create(cast(void*)this, 
                 &compareDestructor, &compareCompare, &compareName)) is null)
-                throw new Exception("Failed to create leveldb comparator");
+                throw new LeveldbException("Failed to create leveldb comparator");
         }
 
         ~this()
@@ -302,15 +301,15 @@ public:
             leveldb_comparator_destroy(_comp);
         }
 
-        void destructor()
+        void destructor() inout
         {}
 
-        int compare(const char[] a, const char[] b)
+        int compare(const char[] a, const char[] b) inout
         {
             return cmp(a, b);
         }
 
-        string name()
+        string name() inout
         {
             return "String Compare";
         }
@@ -320,7 +319,8 @@ public:
 package abstract class ASnapshot
 {
 public:
-    @property const const(leveldb_snapshot_t) ptr();
+    @property
+    inout(leveldb_snapshot_t) ptr() inout;
 }
 
 class ReadOptions
@@ -329,7 +329,8 @@ private:
     leveldb_readoptions_t _opt;
 
 package:
-    @property const const(leveldb_readoptions_t) ptr()
+    @property 
+    inout(leveldb_readoptions_t) ptr() inout
     {
         return _opt;
     }
@@ -339,9 +340,7 @@ public:
     this()
     {
         if((_opt = leveldb_readoptions_create()) is null)
-        {
-            throw new Exception("Failed to create an read options");
-        }
+            throw new LeveldbException("Failed to create an read options");
     }
 
     /// Destroy any valid option pointer
@@ -355,26 +354,27 @@ public:
         }
     }
 
-    @property void verify_checksums(bool val)
+    @property 
+    void verify_checksums(bool val)
     {
-        if(valid)
-            leveldb_readoptions_set_verify_checksums(_opt, val);
+        leveldb_readoptions_set_verify_checksums(_opt, val);
     }
 
-    @property void fill_cache(bool val)
+    @property
+    void fill_cache(bool val)
     {
-        if(valid)
-            leveldb_readoptions_set_fill_cache(_opt, val);
+        leveldb_readoptions_set_fill_cache(_opt, val);
     }
 
-    @property void snapshot(const ASnapshot snapshot)
+    @property 
+    void snapshot(const(ASnapshot) snapshot)
     {
-        if(valid)
-            leveldb_readoptions_set_snapshot(_opt, snapshot.ptr);
+        leveldb_readoptions_set_snapshot(_opt, snapshot.ptr);
     }
 
     /// indicates if the option has been created
-    @property bool valid()
+    @property 
+    bool valid() inout
     {
         return _opt !is null;
     }
@@ -386,7 +386,8 @@ private:
     leveldb_writeoptions_t _opt;
 
 package:
-    @property const const(leveldb_writeoptions_t) ptr()
+    @property
+    inout(leveldb_writeoptions_t) ptr() inout
     {
         return _opt;
     }
@@ -396,9 +397,7 @@ public:
     this()
     {
         if((_opt = leveldb_writeoptions_create()) is null)
-        {
-            throw new Exception("Failed to create an read options");
-        }
+            throw new LeveldbException("Failed to create an read options");
     }
 
     /// Destroy any valid option pointer
@@ -412,14 +411,15 @@ public:
         }
     }
 
-    @property void sync(bool val)
+    @property
+    void sync(bool val)
     {
-        if(valid)
-            leveldb_writeoptions_set_sync(_opt, val);
+        leveldb_writeoptions_set_sync(_opt, val);
     }
 
     /// indicates if the option has been created
-    @property bool valid()
+    @property
+    bool valid() inout
     {
         return _opt !is null;
     }

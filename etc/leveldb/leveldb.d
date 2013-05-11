@@ -2,7 +2,7 @@ module etc.leveldb.leveldb;
 
 public import
     etc.leveldb.db,
-    etc.leveldb.status,
+    etc.leveldb.exceptions,
     etc.leveldb.options;
 
 private import deimos.leveldb.leveldb;
