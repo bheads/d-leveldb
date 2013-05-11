@@ -1,8 +1,27 @@
+/**
+ * D-LevelDB DateBase Object
+ *
+ * This is the main database object.  This object connects to a Leveldb database.
+ *
+ * Copyright: Copyright © 2013 Byron Heads
+ * License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>.
+ * Authors: Byron Heads
+ *
+ * Todo: Add searching and transactions
+*/
+/*          Copyright  © 2013 Byron Heads
+ * Distributed under the Boost Software License, Version 1.0.
+ *    (See accompanying file LICENSE_1_0.txt or copy at
+ *          http://www.boost.org/LICENSE_1_0.txt)
+ */
 module etc.leveldb.db;
 
 private import std.string : toStringz;
 private import std.conv : to;
 private import std.traits : isArray, isPointer;
+
+// Use the temp space for unittesting
+version(unittest) private import std.file : tempDir;
 
 private import
     etc.leveldb.exceptions,
@@ -10,26 +29,48 @@ private import
 
 private import deimos.leveldb.leveldb;
 
-
+/**
+ * LevelDB DB
+ * 
+ * Throws: LeveldbException on errors
+ */
 class DB
 {
 private:
-    leveldb_t _db;
+    leveldb_t _db;  /// Internal LevelDB Pointer
 
 public:
+    /** Create a new unconnected DB */
     this()
     {}
 
-    this(Options opt, string path)
+    /**
+     * Opens a new connection to a levelDB database on creation
+     * 
+     * Params:
+     *      opt = LevelDB Options, sets the db options
+     *      path = path to the leveldb files, each DB needs its own path
+     * Throws: LeveldbException
+     */
+    this(Options opt, ref const(string) path)
     {
         open(opt, path);
     }
 
+    /** Force database to close on destruction, cleans up library memory */
     ~this()
     {
         close();
     }
 
+    /**
+     * Opens a new connection to a levelDB database
+     * 
+     * Params:
+     *      opt = LevelDB Options, sets the db options
+     *      path = path to the leveldb files, each DB needs its own path
+     * Throws: LeveldbException
+     */
     void open(Options opt, ref const(string) path)
     {
         // Close the connection if we are trying to reopen the db
@@ -44,6 +85,9 @@ public:
         if(!_db) throw new LeveldbException(`Failed to connect to '` ~ path ~ `', unknown reason`);
     }
 
+    /**
+     * Close DB connection, also frees _db pointer in leveldb lib
+     */
     @property
     void close() nothrow
     {
@@ -55,26 +99,84 @@ public:
         }
     }
 
-    // Leveldb Put, can pass arrays or 'slices' (pointer and length)
-
+    /**
+     * Inserts/Updates a given value at a given key.
+     *
+     * Only accepts an array for the key and value.
+     *
+     * Example:
+     ---
+     Options opt;
+     opt.create_if_missing = true;
+     DB db(opt, "/my/db/")
+     db.put("User1", "John Doe");
+     ---
+     * Throws: LeveldbException
+     */
     void put(K, V)(K key, V val, const(WriteOptions) opt = DefaultWriteOptions)
         if(isArray(K) && isArray(V))
     {
         put(key.ptr, key.length * K.sizeof, val.ptr, val.length * V.sizeof, opt);
     }
 
+    /**
+     * Inserts/Updates a given value at a given key.
+     *
+     * Only accepts a pointer for the key and an array for value.
+     *
+     * Example:
+     ---
+     Options opt;
+     opt.create_if_missing = true;
+     DB db(opt, "/my/db/")
+     auto uuid = randomUUID();
+     db.put(&uuid, uuid.sizeof, "John Doe");
+     ---
+     * Throws: LeveldbException
+     */
     void put(K, V)(K key, size_t keylen, V val, const(WriteOptions) opt = DefaultWriteOptions)
         if(isPointer(K) && isArray(V))
     {
         put(key, keylen, val.ptr, val.length * V.sizeof, opt);
     }
 
+    /**
+     * Inserts/Updates a given value at a given key.
+     *
+     * Only accepts a array for the key and a pointer for value.
+     *
+     * Example:
+     ---
+     Options opt;
+     opt.create_if_missing = true;
+     DB db(opt, "/my/db/")
+     auto pi = PI;
+     db.put("pi", &pi, pi.sizeof);
+     ---
+     * Throws: LeveldbException
+     */
     void put(K, V)(K key, V val, size_t vallen, const(WriteOptions) opt = DefaultWriteOptions)
         if(isArray(K) && isPointer(V))
     {
         put(key.ptr, key.length * K.sizeof, val, vallen, opt);
     }
 
+    /**
+     * Inserts/Updates a given value at a given key.
+     *
+     * Only accepts a pointer for the key and value.
+     *
+     * Example:
+     ---
+     Options opt;
+     opt.create_if_missing = true;
+     DB db(opt, "/my/db/")
+     auto uuid = randomUUID();
+     auto pi = PI;
+     db.put(&uuid, uuid.sizof, &pi, pi.sizeof);
+     ---
+     * Throws: LeveldbException
+     */
     void put(K, V)(K key, size_t keylen, V val, size_t vallen, const(WriteOptions) opt = DefaultWriteOptions)
         if(isPointer(V) && isPointer(V))
     {
@@ -87,14 +189,43 @@ public:
         if(errptr) throw new LeveldbException(errptr);
     }
 
-    // Delete operator
-
+    /**
+     * Deletes a key from the db
+     *
+     * Only accepts an array for the key.
+     *
+     * Example:
+     ---
+     Options opt;
+     opt.create_if_missing = true;
+     DB db(opt, "/my/db/")
+     db.put("User1", "John Doe");
+     db.del("User1");
+     ---
+     * Throws: LeveldbException
+     */
     void del(K)(K key, const(WriteOptions) opt = DefaultWriteOptions)
         if(isArray(K))
     {
         del(key.ptr, key.length * K.sizeof, opt);
     }
 
+    /**
+     * Deletes a key from the db
+     *
+     * Only accepts a pointer for the key.
+     *
+     * Example:
+     ---
+     Options opt;
+     opt.create_if_missing = true;
+     DB db(opt, "/my/db/")
+     auto uuid = UUID("8AB3060E-2cba-4f23-b74c-b52db3bdfb46");
+     db.put(&uuid, uuid.sizeof, "John Doe");
+     db.del(&uuid, uuid.sizeof);
+     ---
+     * Throws: LeveldbException
+     */
     void del(K)(K key, size_t keylen, const(WriteOptions) opt = DefaultWriteOptions)
         if(isPointer(K))
     {
@@ -107,14 +238,51 @@ public:
         if(errptr) throw new LeveldbException(errptr);
     }
 
-    // Getters
-
+    /**
+     * Gets an entry from the DB
+     *
+     * Only accepts an array for the key.
+     * V must be convertable from char array.
+     *
+     * Example:
+     ---
+     Options opt;
+     opt.create_if_missing = true;
+     DB db(opt, "/my/db/")
+     db.put("User1", "John Doe");
+     string name;
+     enforce(db.get("User1", name));
+     assert(name == "John Doe");
+     ---
+     * Throws: LeveldbException
+     * Returns: true if the key was found in the DB
+     */
     bool get(K, V)(K key, out V value, const(ReadOptions) opt = DefaultReadOptions)
         if(isArray(K) && __traits(compiles, to!V([-1, 2, 4])))
     {
         return get(key.ptr, key.length * K.sizeof, value, opt);
     }
 
+    /**
+     * Gets an entry from the DB
+     *
+     * Only accepts an pointer for the key.
+     * V must be convertable from char array.
+     *
+     * Example:
+     ---
+     Options opt;
+     opt.create_if_missing = true;
+     DB db(opt, "/my/db/")
+     auto uuid = UUID("8AB3060E-2cba-4f23-b74c-b52db3bdfb46");
+     db.put(&uuid, uuid.sizeof, "John Doe");
+     string name;
+     enforce(db.get(&uuid, uuid.sizeof, name));
+     assert(name == "John Doe");
+     ---
+     * Throws: LeveldbException
+     * Returns: true if the key was found in the DB
+     */
     bool get(K, V)(K key, size_t keylen, out V value, const(ReadOptions) opt = DefaultReadOptions)
         if(isPointer(K) && __traits(compiles, to!V(['a'])))
     {
@@ -135,12 +303,51 @@ public:
         return false;
     }
 
+    /**
+     * Gets an entry from the DB
+     *
+     * Only accepts an array for the key.
+     *
+     * Example:
+     ---
+     Options opt;
+     opt.create_if_missing = true;
+     DB db(opt, "/my/db/")
+     auto uuid = UUID("8AB3060E-2cba-4f23-b74c-b52db3bdfb46");
+     db.put("My UUID", &uuid, uuid.sizeof);
+     auto name = db.get("My UUID");
+     assert(name.as!UUID == uuid);
+     ---
+     * Throws: LeveldbException
+     * Returns: A CPointer struct, this holds the returned pointer and size
+     * CPointer will safely clean up the result
+     */
     const(CPointer) get(K)(K key, const(ReadOptions) opt = DefaultReadOptions)
         if(isArray(K))
     {
         return get(k.ptr, k.length * K.sizeof, opt);
     }
 
+    /**
+     * Gets an entry from the DB
+     *
+     * Only accepts an pointer for the key.
+     *
+     * Example:
+     ---
+     Options opt;
+     opt.create_if_missing = true;
+     DB db(opt, "/my/db/")
+     auto uuid = UUID("8AB3060E-2cba-4f23-b74c-b52db3bdfb46");
+     auto name = "John Doe";
+     db.put(&uuid, uuid.sizeof, name);
+     auto name = db.get(&uuid, uuid.sizeof);
+     assert(name.as!string == name);
+     ---
+     * Throws: LeveldbException
+     * Returns: A CPointer struct, this holds the returned pointer and size
+     * CPointer will safely clean up the result
+     */
     const(CPointer) get(K)(K key, size_t keylen, const(ReadOptions) opt = DefaultReadOptions)
         if(isPointer(K))
     {
@@ -155,8 +362,34 @@ public:
         return new CPointer(val, vallen);
     }
 
-    // Batch write
+    /**
+     * Sublmits a BatchWrite to the DB.
+     *
+     * Used to do batch writes.
+     *
+     * Example:
+     ---
+     Options opt;
+     opt.create_if_missing = true;
+     DB db(opt, "/my/db/")
+     // Unsafe banking example
+     WriteBatch batch;
 
+     double joe = db.get("Joe").as!double;
+     double sally = db.get("Sally").as!double;
+
+     joe -= 10.00;
+     sally += 10.00;
+     if(joe < 0.0)
+        joe -= 30.00; // overdraft fee
+
+     // submit the put in a single update
+     batch.put("Joe", &joe, joe.sizeof);
+     batch.put("Sally", &sally, sally.sizeof);
+     db.write(batch);
+     ---
+     * Throws: LeveldbException
+     */
     void write(const(WriteBatch) batch, const(WriteOptions) opt = DefaultWriteOptions)
     {
         if(!isOpen) throw new LeveldbException(`Not connected to a valid db`);
@@ -168,24 +401,64 @@ public:
         if(errptr) throw new LeveldbException(errptr);
     }
 
+    /** 
+     * Returns a readonly snapshot
+     *
+     * Throws: LeveldbException
+     */
     @property
-    ASnapshot getSnapshot()
+    ASnapshot snapshot()
     {
+        if(!isOpen) throw new LeveldbException(`Not connected to a valid db`);
         return new Snapshot();
     }
 
+    /* 
+     * Returns a database iterator
+     *
+     * Throws: LeveldbException
+     */
     @property
-    Iterator getIterator(const(ReadOptions) opt = DefaultReadOptions)
+    Iterator iterator(const(ReadOptions) opt = DefaultReadOptions)
     {
+        if(!isOpen) throw new LeveldbException(`Not connected to a valid db`);
         return new Iterator(opt);
     }
 
+    /**
+     * Tests if the database is open
+     *
+     * Returns: true if there is an open database
+     */
     @property
     bool isOpen() inout nothrow
     {
         return _db !is null;
     }
 
+    /**
+     * DB Snapshot
+     *
+     * Snapshots can be applied to ReadOptions.  Created from a DB object
+     *
+     * Example:
+     ---
+     Options opt;
+     opt.create_if_missing = true;
+     DB db(opt, "/my/db/")
+
+     auto snap = db.snapshot;
+     db.put("Future", "Stuff");
+
+     ReadOptions ro;
+     ro.snapshot(snap);
+
+     string str;
+     assert(db.get("Future", str));
+     assert(!db.get("Future", str, ro));
+     ---
+     * Throws: LeveldbException
+     */
     class Snapshot : ASnapshot
     {
     private:
@@ -204,6 +477,7 @@ public:
                 throw new LeveldbException("Failed to create snapshot");
         }
 
+        /** Cleanup snapshot memory */
         ~this()
         {
             if(valid)
@@ -214,7 +488,7 @@ public:
             }
         }
 
-        /// indicates if the snapshot has been created
+        /// test if the snapshot has been created
         @property 
         bool valid() inout
         {
@@ -222,6 +496,27 @@ public:
         }
     }
 
+
+    /**
+     * DB Iterator
+     *
+     * Can iterate the db
+     *
+     * Example:
+     ---
+     Options opt;
+     opt.create_if_missing = true;
+     DB db(opt, "/my/db/")
+
+     auto it = db.iterator;
+     foreach(string key, string value; it)
+     {
+        writeln(key, " - ", value);
+     }
+    
+     ---
+     * Throws: LeveldbException
+     */
     class Iterator
     {
     private:
@@ -375,6 +670,10 @@ public:
     }
 }
 
+    /**
+     * Holds a pointer returned from leveldb, frees
+     * the memory on destruction.
+     */
 class CPointer
 {
 private:
@@ -398,6 +697,20 @@ public:
         if(isPointer(T))
     {
         return _ptr;
+    }
+
+    @property
+    inout(T) to(T)() inout
+        if(__traits(compiles, to!T(&_ptr)))
+    {
+        return to!T(&_ptr);
+    }
+
+    @property
+    inout(T) as(T)() inout
+        if(__traits(compiles, cast(T*)(_ptr)))
+    {
+        return &(cast(T*)(_ptr));
     }
 
     @property
