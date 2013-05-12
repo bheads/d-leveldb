@@ -18,10 +18,35 @@ module etc.leveldb.db;
 
 private import std.string : toStringz;
 private import std.conv : to;
-private import std.traits : isArray, isPointer;
+private import std.traits : isPointer, isArray;
+private import std.c.string : memcpy;
+private import core.memory : GC;
 
 // Use the temp space for unittesting
-version(unittest) private import std.file : tempDir;
+version(unittest)
+{
+    private import std.file : 
+        tempDir, mkdirRecurse, rmdirRecurse ;
+    private import std.stdio;
+
+    const __gshared const(string) tempPath;
+    static this()
+    {
+        tempPath = tempDir() ~ `/unittest_d_leveldb/`;
+        try
+        {
+            mkdirRecurse(tempPath);
+        } catch(Exception e) {}
+    }
+
+    static ~this()
+    {
+        try
+        {
+            rmdirRecurse(tempPath);
+        } catch(Exception e) {}
+    }
+}
 
 private import
     etc.leveldb.exceptions,
@@ -52,7 +77,7 @@ public:
      *      path = path to the leveldb files, each DB needs its own path
      * Throws: LeveldbException
      */
-    this(Options opt, ref const(string) path)
+    this(Options opt, string path)
     {
         open(opt, path);
     }
@@ -71,11 +96,11 @@ public:
      *      path = path to the leveldb files, each DB needs its own path
      * Throws: LeveldbException
      */
-    void open(Options opt, ref const(string) path)
+    void open(Options opt, string path)
     {
         // Close the connection if we are trying to reopen the db
         close();
-        
+
         // Catch any leveldb errors
         char* errptr = null;
         scope(failure) if(errptr) leveldb_free(errptr);
@@ -113,8 +138,7 @@ public:
      ---
      * Throws: LeveldbException
      */
-    void put(K, V)(K key, V val, const(WriteOptions) opt = DefaultWriteOptions)
-        if(isArray(K) && isArray(V))
+    void put(K, V)(K[] key, V[] val, const(WriteOptions) opt = DefaultWriteOptions)
     {
         put(key.ptr, key.length * K.sizeof, val.ptr, val.length * V.sizeof, opt);
     }
@@ -134,10 +158,51 @@ public:
      ---
      * Throws: LeveldbException
      */
-    void put(K, V)(K key, size_t keylen, V val, const(WriteOptions) opt = DefaultWriteOptions)
-        if(isPointer(K) && isArray(V))
+    void put(K, V)(K key, size_t keylen, V[] val, const(WriteOptions) opt = DefaultWriteOptions)
+        if(isPointer!K)
     {
         put(key, keylen, val.ptr, val.length * V.sizeof, opt);
+    }
+
+    /**
+     * Inserts/Updates a given value at a given key.
+     *
+     * Only accepts an array for the key and value.
+     *
+     * Example:
+     ---
+     Options opt;
+     opt.create_if_missing = true;
+     DB db(opt, "/my/db/")
+     db.put("User1", "John Doe");
+     ---
+     * Throws: LeveldbException
+     */
+    void put(K, V)(K[] key, V val, const(WriteOptions) opt = DefaultWriteOptions)
+        if(!isArray!V)
+    {
+        put(key.ptr, key.length * K.sizeof, &val, val.sizeof, opt);
+    }
+
+    /**
+     * Inserts/Updates a given value at a given key.
+     *
+     * Only accepts a pointer for the key and an array for value.
+     *
+     * Example:
+     ---
+     Options opt;
+     opt.create_if_missing = true;
+     DB db(opt, "/my/db/")
+     auto uuid = randomUUID();
+     db.put(&uuid, uuid.sizeof, "John Doe");
+     ---
+     * Throws: LeveldbException
+     */
+    void put(K, V)(K key, size_t keylen, V val, const(WriteOptions) opt = DefaultWriteOptions)
+        if(isPointer!K && !isArray!V)
+    {
+        put(key, keylen, &val, val.sizeof, opt);
     }
 
     /**
@@ -155,8 +220,8 @@ public:
      ---
      * Throws: LeveldbException
      */
-    void put(K, V)(K key, V val, size_t vallen, const(WriteOptions) opt = DefaultWriteOptions)
-        if(isArray(K) && isPointer(V))
+    void put(K, V)(K[] key, V val, size_t vallen, const(WriteOptions) opt = DefaultWriteOptions)
+        if(isPointer!V)
     {
         put(key.ptr, key.length * K.sizeof, val, vallen, opt);
     }
@@ -178,14 +243,14 @@ public:
      * Throws: LeveldbException
      */
     void put(K, V)(K key, size_t keylen, V val, size_t vallen, const(WriteOptions) opt = DefaultWriteOptions)
-        if(isPointer(V) && isPointer(V))
+        if(isPointer!K && isPointer!V)
     {
         if(!isOpen) throw new LeveldbException(`Not connected to a valid db`);
         
         char* errptr = null;
         scope(failure) if(errptr) leveldb_free(errptr);
 
-        leveldb_put(_db, opt.ptr, key, keylen, val, vallen, &errptr);
+        leveldb_put(_db, opt.ptr, cast(const(char*))key, keylen, cast(const(char*))val, vallen, &errptr);
         if(errptr) throw new LeveldbException(errptr);
     }
 
@@ -204,8 +269,7 @@ public:
      ---
      * Throws: LeveldbException
      */
-    void del(K)(K key, const(WriteOptions) opt = DefaultWriteOptions)
-        if(isArray(K))
+    void del(K)(K[] key, const(WriteOptions) opt = DefaultWriteOptions)
     {
         del(key.ptr, key.length * K.sizeof, opt);
     }
@@ -227,14 +291,14 @@ public:
      * Throws: LeveldbException
      */
     void del(K)(K key, size_t keylen, const(WriteOptions) opt = DefaultWriteOptions)
-        if(isPointer(K))
+        if(isPointer!K)
     {
         if(!isOpen) throw new LeveldbException(`Not connected to a valid db`);
         
         char* errptr = null;
         scope(failure) if(errptr) leveldb_free(errptr);
 
-        leveldb_delete(_db, opt.ptr, key.ptr, keylen, &errptr);
+        leveldb_delete(_db, opt.ptr, cast(const(char*))key, keylen, &errptr);
         if(errptr) throw new LeveldbException(errptr);
     }
 
@@ -257,8 +321,7 @@ public:
      * Throws: LeveldbException
      * Returns: true if the key was found in the DB
      */
-    bool get(K, V)(K key, out V value, const(ReadOptions) opt = DefaultReadOptions)
-        if(isArray(K) && __traits(compiles, to!V([-1, 2, 4])))
+    bool get(K, V)(K[] key, out V value, const(ReadOptions) opt = DefaultReadOptions)
     {
         return get(key.ptr, key.length * K.sizeof, value, opt);
     }
@@ -284,7 +347,7 @@ public:
      * Returns: true if the key was found in the DB
      */
     bool get(K, V)(K key, size_t keylen, out V value, const(ReadOptions) opt = DefaultReadOptions)
-        if(isPointer(K) && __traits(compiles, to!V(['a'])))
+        if(isPointer!K)
     {
         if(!isOpen) throw new LeveldbException(`Not connected to a valid db`);
 
@@ -292,12 +355,21 @@ public:
         scope(failure) if(errptr) leveldb_free(errptr);
 
         size_t vallen;
-        auto val = leveldb_get(_db, opt.ptr, key.ptr, keylen, &vallen, &errptr);
+        auto val = leveldb_get(_db, opt.ptr, cast(const(char*))key, keylen, &vallen, &errptr);
+        scope(exit) if(val) leveldb_free(val);
         if(errptr) throw new LeveldbException(errptr);
         if(val !is null)
         {
-            value = to!V(val[0..vallen]);
-            leveldb_free(val);
+            static if(is(V == interface)) assert(0);
+            static if(isArray!V) value = cast(V)(val[0..vallen]);
+            else static if(__traits(compiles, value.dup)) value = *(cast(V*)val).dup;
+            else static if(__traits(compiles, value = new V(*(cast(const(V*))val)))) value = new V(*(cast(const(V*))val));
+            else
+            {
+                static if(is(V == class))
+                if(value is null) value = *cast(V*)GC.malloc(V.sizeof);
+                memcpy(cast(void*)&value, cast(const(void*))val, V.sizeof);
+            }
             return true;
         }
         return false;
@@ -315,17 +387,16 @@ public:
      DB db(opt, "/my/db/")
      auto uuid = UUID("8AB3060E-2cba-4f23-b74c-b52db3bdfb46");
      db.put("My UUID", &uuid, uuid.sizeof);
-     auto name = db.get("My UUID");
+     auto name = db.getraw("My UUID");
      assert(name.as!UUID == uuid);
      ---
      * Throws: LeveldbException
      * Returns: A CPointer struct, this holds the returned pointer and size
      * CPointer will safely clean up the result
      */
-    const(CPointer) get(K)(K key, const(ReadOptions) opt = DefaultReadOptions)
-        if(isArray(K))
+    const(CPointer) getraw(K)(K[] key, const(ReadOptions) opt = DefaultReadOptions)
     {
-        return get(k.ptr, k.length * K.sizeof, opt);
+        return getraw(key.ptr, key.length * K.sizeof, opt);
     }
 
     /**
@@ -341,15 +412,15 @@ public:
      auto uuid = UUID("8AB3060E-2cba-4f23-b74c-b52db3bdfb46");
      auto name = "John Doe";
      db.put(&uuid, uuid.sizeof, name);
-     auto name = db.get(&uuid, uuid.sizeof);
+     auto name = db.getraw(&uuid, uuid.sizeof);
      assert(name.as!string == name);
      ---
      * Throws: LeveldbException
      * Returns: A CPointer struct, this holds the returned pointer and size
      * CPointer will safely clean up the result
      */
-    const(CPointer) get(K)(K key, size_t keylen, const(ReadOptions) opt = DefaultReadOptions)
-        if(isPointer(K))
+    const(CPointer) getraw(K)(K key, size_t keylen, const(ReadOptions) opt = DefaultReadOptions)
+        if(isPointer!K)
     {
         if(!isOpen) throw new LeveldbException(`Not connected to a valid db`);
 
@@ -357,7 +428,7 @@ public:
         scope(failure) if(errptr) leveldb_free(errptr);
 
         size_t vallen;
-        auto val = leveldb_get(_db, opt.ptr, key.ptr, keylen, &vallen, &errptr);
+        auto val = leveldb_get(_db, opt.ptr, cast(const(char*))key, keylen, &vallen, &errptr);
         if(errptr) throw new LeveldbException(errptr);
         return new CPointer(val, vallen);
     }
@@ -566,15 +637,14 @@ public:
         }
 
         @property
-        void seek(K)(K key)
-            if(isArray(K))
+        void seek(K)(K[] key)
         {
             seek(key.ptr, key.length * K.sizeof);
         }
 
         @property
         void seek(K)(K key, size_t keylen)
-            if(isPointer(K))
+            if(isPointer!K)
         {
             leveldb_iter_seek(_iter, key, keylen);
         }
@@ -668,12 +738,110 @@ public:
             return result;
         }
     }
+} // class DB
+
+// Basic open, write string close, open get string, del string, get it
+unittest
+{
+    auto opt = new Options;
+    opt.create_if_missing = true;
+    auto db = new DB(opt, tempPath ~ `s1`);
+    assert(db.isOpen);
+    db.put("Hello", "World");
+    db.close;
+    assert(!db.isOpen);
+    db.open(opt, tempPath ~ `s1`);
+    assert(db.isOpen);
+    string ret;
+    assert(db.get("Hello", ret));
+    assert(ret == "World");
+    db.del("Hello");
+    assert(!db.get("Hello", ret));
+    assert(ret != "World");
+    destroy(db); // force destructor to be called
 }
 
-    /**
-     * Holds a pointer returned from leveldb, frees
-     * the memory on destruction.
-     */
+// Test value as a pointer
+unittest
+{
+    auto opt = new Options;
+    opt.create_if_missing = true;
+    auto db = new DB(opt, tempPath ~ `s1`);
+    double pi = 3.1456;
+    db.put("PI", &pi, pi.sizeof);
+    auto pi2 = db.getraw("PI");
+    assert(pi2.ok);
+    assert(pi2.length == pi.sizeof);
+    assert(pi2.as!double == pi);
+}
+
+// test structs as key and value
+unittest
+{
+    struct Point
+    {
+        double x, y;
+    }
+
+    import std.uuid;
+    auto uuid = randomUUID();
+
+    auto opt = new Options;
+    opt.create_if_missing = true;
+    auto db = new DB(opt, tempPath ~ `s2`);
+    auto p = Point(55, 44);
+    Point p2;
+    db.put(&uuid, uuid.sizeof, &p, p.sizeof);
+    auto o1 = db.getraw(&uuid, uuid.sizeof);
+    assert(o1.as!Point.x == p.x);
+    assert(o1.as!Point.y == p.y);
+    assert(db.get(&uuid, uuid.sizeof, p2));
+    auto o2 = db.getraw(&uuid, uuid.sizeof);
+    db.del(&uuid, uuid.sizeof);
+    GC.collect();
+    assert(p2.x == p.x);
+    assert(p2.y == p.y);
+    assert(!db.get(&uuid, uuid.sizeof, p2));
+}
+
+// test structs as key and classes as values
+unittest
+{
+    class Point
+    {
+        this(double x, double y)
+        {
+            this.x = x;
+            this.y = y;
+        }
+        double x, y;
+    }
+
+    import std.uuid;
+    auto uuid = randomUUID();
+
+    auto opt = new Options;
+    opt.create_if_missing = true;
+    auto db = new DB(opt, tempPath ~ `c1`);
+    auto p = new Point(55, 44);
+    Point p2;
+    db.put(&uuid, uuid.sizeof, &p, p.sizeof);
+    db.put("X", &p, p.sizeof);
+    auto o1 = db.getraw(&uuid, uuid.sizeof);
+    assert(o1.as!Point.x == p.x);
+    assert(o1.as!Point.y == p.y);
+    assert(db.get(&uuid, uuid.sizeof, p2));
+    auto o2 = db.getraw(&uuid, uuid.sizeof);
+    db.del(&uuid, uuid.sizeof);
+    GC.collect();
+    assert(p2.x == p.x);
+    assert(p2.y == p.y);
+}
+
+/**
+ * Holds a pointer returned from leveldb, frees
+ * the memory on destruction.
+ */
 class CPointer
 {
 private:
@@ -708,9 +876,9 @@ public:
 
     @property
     inout(T) as(T)() inout
-        if(__traits(compiles, cast(T*)(_ptr)))
+        if(__traits(compiles, *(cast(T*)_ptr)))
     {
-        return &(cast(T*)(_ptr));
+        return *(cast(inout(T*))_ptr);
     }
 
     @property
@@ -761,42 +929,40 @@ private:
         leveldb_writebatch_clear(_ptr);
     }
 
-    void put(K, V)(K key, V val)
-        if(isArray(K) && isArray(V))
+    void put(K, V)(K[] key, V[] val)
     {
         put(key.ptr, key.length * K.size_t, val.ptr, val.length * V.sizeof);
     }
 
-    void put(K, V)(K key, size_t keylen, V val)
-        if(isPointer(K) && isArray(V))
+    void put(K, V)(K key, size_t keylen, V[] val)
+        if(isPointer!K)
     {
         put(key.ptr, key.length * K.size_t, valptr, vallen);
 
     }
 
-    void put(K, V)(K key, V val, size_t vallen)
-        if(isArray(K) && isPointer(V))
+    void put(K, V)(K[] key, V val, size_t vallen)
+        if(isPointer!V)
     {
         put(key, keylen, val.ptr, val.length * V.sizeof);
     }
 
     void put(K, V)(K key, size_t keylen, V val, size_t vallen)
-        if(isPointer(K) && isPointer(V))
+        if(isPointer!K && isPointer!V)
     {
-        leveldb_writebatch_put(_ptr, key, keylen, val, vallen);
+        leveldb_writebatch_put(_ptr, cast(const(char*))key, keylen, cast(const(char*))val, vallen);
     }
 
 
 
-    void del(K)(K key)
-        if(isArray(K))
+    void del(K)(K[] key)
     {
         del(key.ptr, key.length * K.sizeof);
     }
 
     void del(K)(K key, size_t keylen)
     {
-        leveldb_writebatch_delete(_ptr, key, keylen);
+        leveldb_writebatch_delete(_ptr, cast(const(char*))key, keylen);
     }
 
     void iterate(Visitor visitor)
@@ -822,7 +988,32 @@ private:
         void delegate(const(char[]) key, const(char[]) value) puts;
         void delegate(const(char[]) key) dels;
     }
+} // WriteBatch
+
+
+unittest
+{
+    auto opt = new Options;
+    opt.create_if_missing = true;
+    auto db = new DB(opt, tempPath ~ `wb1`);
+
+    db.put("Joe", 25);
+    db.put("Sally", 905);
+    int i;
+    assert(db.get("Joe", i));
+    assert(i == 25);
+    assert(db.get("Sally", i));
+    assert(i == 905);
+
+
+    auto wb = new WriteBatch();
+    //wb.put()
+
+    auto wo = new WriteOptions();
+
+
 }
+
 
 void destoryDB(const Options opt, string path)
 {

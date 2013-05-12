@@ -19,7 +19,7 @@ static this()
 class Options
 {
 private:
-    leveldb_options_t _opt;
+    leveldb_options_t _opt = null;
 
     Environment _env;
     Cache _cache;

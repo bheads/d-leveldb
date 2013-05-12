@@ -19,7 +19,7 @@
         },
         {
             "name" : "test",
-            "dflags" : ["-debug", "-unittest"],
+            "dflags" : ["-debug", "-unittest", "-gc"],
             "importPaths": ["."],
             "targetType" : "executable",
             "sourcePaths" : [ "./etc", "./test" ],
