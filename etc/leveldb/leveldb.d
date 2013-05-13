@@ -3,6 +3,7 @@ module etc.leveldb.leveldb;
 public import
     etc.leveldb.db,
     etc.leveldb.exceptions,
+    etc.leveldb.slice,
     etc.leveldb.options;
 
 private import deimos.leveldb.leveldb;

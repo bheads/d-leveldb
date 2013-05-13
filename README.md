@@ -10,7 +10,7 @@ void main()
     auto opt = new Options;
     opt.create_if_missing = true;
 
-    auto db = new DB("path/to/db");
+    auto db = new DB(opt, "path/to/db");
     db.put(Slice("Hello"), Slice("World"));
 
     assert(db.getraw(Slice("Hello")).as!string == "World");
