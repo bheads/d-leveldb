@@ -50,6 +50,8 @@ version(unittest)
 
 private import
     etc.leveldb.exceptions,
+    etc.leveldb.slice,
+    etc.leveldb.writebatch,
     etc.leveldb.options;
 
 private import deimos.leveldb.leveldb;
@@ -127,178 +129,47 @@ public:
     /**
      * Inserts/Updates a given value at a given key.
      *
-     * Only accepts an array for the key and value.
-     *
      * Example:
      ---
-     Options opt;
+     auto opt = new Options;
      opt.create_if_missing = true;
-     DB db(opt, "/my/db/")
-     db.put("User1", "John Doe");
+     auto db = new DB(opt, "/my/db/");
+     db.put(Slice("User1"), Slice("John Doe"));
      ---
      * Throws: LeveldbException
      */
-    void put(K, V)(K[] key, V[] val, const(WriteOptions) opt = DefaultWriteOptions)
-    {
-        put(key.ptr, key.length * K.sizeof, val.ptr, val.length * V.sizeof, opt);
-    }
-
-    /**
-     * Inserts/Updates a given value at a given key.
-     *
-     * Only accepts a pointer for the key and an array for value.
-     *
-     * Example:
-     ---
-     Options opt;
-     opt.create_if_missing = true;
-     DB db(opt, "/my/db/")
-     auto uuid = randomUUID();
-     db.put(&uuid, uuid.sizeof, "John Doe");
-     ---
-     * Throws: LeveldbException
-     */
-    void put(K, V)(K key, size_t keylen, V[] val, const(WriteOptions) opt = DefaultWriteOptions)
-        if(isPointer!K)
-    {
-        put(key, keylen, val.ptr, val.length * V.sizeof, opt);
-    }
-
-    /**
-     * Inserts/Updates a given value at a given key.
-     *
-     * Only accepts an array for the key and value.
-     *
-     * Example:
-     ---
-     Options opt;
-     opt.create_if_missing = true;
-     DB db(opt, "/my/db/")
-     db.put("User1", "John Doe");
-     ---
-     * Throws: LeveldbException
-     */
-    void put(K, V)(K[] key, V val, const(WriteOptions) opt = DefaultWriteOptions)
-        if(!isArray!V)
-    {
-        put(key.ptr, key.length * K.sizeof, &val, val.sizeof, opt);
-    }
-
-    /**
-     * Inserts/Updates a given value at a given key.
-     *
-     * Only accepts a pointer for the key and an array for value.
-     *
-     * Example:
-     ---
-     Options opt;
-     opt.create_if_missing = true;
-     DB db(opt, "/my/db/")
-     auto uuid = randomUUID();
-     db.put(&uuid, uuid.sizeof, "John Doe");
-     ---
-     * Throws: LeveldbException
-     */
-    void put(K, V)(K key, size_t keylen, V val, const(WriteOptions) opt = DefaultWriteOptions)
-        if(isPointer!K && !isArray!V)
-    {
-        put(key, keylen, &val, val.sizeof, opt);
-    }
-
-    /**
-     * Inserts/Updates a given value at a given key.
-     *
-     * Only accepts a array for the key and a pointer for value.
-     *
-     * Example:
-     ---
-     Options opt;
-     opt.create_if_missing = true;
-     DB db(opt, "/my/db/")
-     auto pi = PI;
-     db.put("pi", &pi, pi.sizeof);
-     ---
-     * Throws: LeveldbException
-     */
-    void put(K, V)(K[] key, V val, size_t vallen, const(WriteOptions) opt = DefaultWriteOptions)
-        if(isPointer!V)
-    {
-        put(key.ptr, key.length * K.sizeof, val, vallen, opt);
-    }
-
-    /**
-     * Inserts/Updates a given value at a given key.
-     *
-     * Only accepts a pointer for the key and value.
-     *
-     * Example:
-     ---
-     Options opt;
-     opt.create_if_missing = true;
-     DB db(opt, "/my/db/")
-     auto uuid = randomUUID();
-     auto pi = PI;
-     db.put(&uuid, uuid.sizof, &pi, pi.sizeof);
-     ---
-     * Throws: LeveldbException
-     */
-    void put(K, V)(K key, size_t keylen, V val, size_t vallen, const(WriteOptions) opt = DefaultWriteOptions)
-        if(isPointer!K && isPointer!V)
+    void put(const(Slice) key, const(Slice) val, const(WriteOptions) opt = DefaultWriteOptions)
     {
         if(!isOpen) throw new LeveldbException(`Not connected to a valid db`);
-        
+
         char* errptr = null;
         scope(failure) if(errptr) leveldb_free(errptr);
 
-        leveldb_put(_db, opt.ptr, cast(const(char*))key, keylen, cast(const(char*))val, vallen, &errptr);
+        leveldb_put(_db, opt.ptr, key.ptr!(const(char*)), key.length, val.ptr!(const(char*)), val.length, &errptr);
         if(errptr) throw new LeveldbException(errptr);
     }
 
     /**
      * Deletes a key from the db
      *
-     * Only accepts an array for the key.
-     *
      * Example:
      ---
-     Options opt;
+     auto opt = new Options;
      opt.create_if_missing = true;
-     DB db(opt, "/my/db/")
-     db.put("User1", "John Doe");
-     db.del("User1");
+     auto db = new DB(opt, "/my/db/");
+     db.put(Slice("User1"), Slice("John Doe"));
+     db.del(Slice("User1"));
      ---
      * Throws: LeveldbException
      */
-    void del(K)(K[] key, const(WriteOptions) opt = DefaultWriteOptions)
-    {
-        del(key.ptr, key.length * K.sizeof, opt);
-    }
-
-    /**
-     * Deletes a key from the db
-     *
-     * Only accepts a pointer for the key.
-     *
-     * Example:
-     ---
-     Options opt;
-     opt.create_if_missing = true;
-     DB db(opt, "/my/db/")
-     auto uuid = UUID("8AB3060E-2cba-4f23-b74c-b52db3bdfb46");
-     db.put(&uuid, uuid.sizeof, "John Doe");
-     db.del(&uuid, uuid.sizeof);
-     ---
-     * Throws: LeveldbException
-     */
-    void del(K)(K key, size_t keylen, const(WriteOptions) opt = DefaultWriteOptions)
-        if(isPointer!K)
+    void del(const(Slice) key, const(WriteOptions) opt = DefaultWriteOptions)
     {
         if(!isOpen) throw new LeveldbException(`Not connected to a valid db`);
         
         char* errptr = null;
         scope(failure) if(errptr) leveldb_free(errptr);
 
-        leveldb_delete(_db, opt.ptr, cast(const(char*))key, keylen, &errptr);
+        leveldb_delete(_db, opt.ptr, key.ptr!(const(char*)), key.length, &errptr);
         if(errptr) throw new LeveldbException(errptr);
     }
 
@@ -310,44 +181,19 @@ public:
      *
      * Example:
      ---
-     Options opt;
+     auto opt = new Options;
      opt.create_if_missing = true;
-     DB db(opt, "/my/db/")
-     db.put("User1", "John Doe");
+     auto db = new DB(opt, "/my/db/");
+     db.put(Slice("User1"), Slice("John Doe"));
      string name;
-     enforce(db.get("User1", name));
+     enforce(db.get(slice("User1"), name));
      assert(name == "John Doe");
      ---
      * Throws: LeveldbException
      * Returns: true if the key was found in the DB
      */
-    bool get(K, V)(K[] key, out V value, const(ReadOptions) opt = DefaultReadOptions)
-    {
-        return get(key.ptr, key.length * K.sizeof, value, opt);
-    }
-
-    /**
-     * Gets an entry from the DB
-     *
-     * Only accepts an pointer for the key.
-     * V must be convertable from char array.
-     *
-     * Example:
-     ---
-     Options opt;
-     opt.create_if_missing = true;
-     DB db(opt, "/my/db/")
-     auto uuid = UUID("8AB3060E-2cba-4f23-b74c-b52db3bdfb46");
-     db.put(&uuid, uuid.sizeof, "John Doe");
-     string name;
-     enforce(db.get(&uuid, uuid.sizeof, name));
-     assert(name == "John Doe");
-     ---
-     * Throws: LeveldbException
-     * Returns: true if the key was found in the DB
-     */
-    bool get(K, V)(K key, size_t keylen, out V value, const(ReadOptions) opt = DefaultReadOptions)
-        if(isPointer!K)
+    bool get(V)(const(Slice) key, out V value, const(ReadOptions) opt = DefaultReadOptions)
+        if(!is(V == const(ReadOptions)))
     {
         if(!isOpen) throw new LeveldbException(`Not connected to a valid db`);
 
@@ -355,7 +201,7 @@ public:
         scope(failure) if(errptr) leveldb_free(errptr);
 
         size_t vallen;
-        auto val = leveldb_get(_db, opt.ptr, cast(const(char*))key, keylen, &vallen, &errptr);
+        auto val = leveldb_get(_db, opt.ptr, key.ptr!(const(char*)), key.length, &vallen, &errptr);
         scope(exit) if(val) leveldb_free(val);
         if(errptr) throw new LeveldbException(errptr);
         if(val !is null)
@@ -382,45 +228,19 @@ public:
      *
      * Example:
      ---
-     Options opt;
+     auto opt = new Options;
      opt.create_if_missing = true;
-     DB db(opt, "/my/db/")
+     auto db = new DB(opt, "/my/db/");
      auto uuid = UUID("8AB3060E-2cba-4f23-b74c-b52db3bdfb46");
-     db.put("My UUID", &uuid, uuid.sizeof);
-     auto name = db.getraw("My UUID");
+     db.put(Slice("My UUID"), Slice(uuid));
+     auto name = db.getraw(Slice("My UUID"));
      assert(name.as!UUID == uuid);
      ---
      * Throws: LeveldbException
-     * Returns: A CPointer struct, this holds the returned pointer and size
-     * CPointer will safely clean up the result
+     * Returns: A Slice struct, this holds the returned pointer and size
+     * Slice will safely clean up the result
      */
-    const(CPointer) getraw(K)(K[] key, const(ReadOptions) opt = DefaultReadOptions)
-    {
-        return getraw(key.ptr, key.length * K.sizeof, opt);
-    }
-
-    /**
-     * Gets an entry from the DB
-     *
-     * Only accepts an pointer for the key.
-     *
-     * Example:
-     ---
-     Options opt;
-     opt.create_if_missing = true;
-     DB db(opt, "/my/db/")
-     auto uuid = UUID("8AB3060E-2cba-4f23-b74c-b52db3bdfb46");
-     auto name = "John Doe";
-     db.put(&uuid, uuid.sizeof, name);
-     auto name = db.getraw(&uuid, uuid.sizeof);
-     assert(name.as!string == name);
-     ---
-     * Throws: LeveldbException
-     * Returns: A CPointer struct, this holds the returned pointer and size
-     * CPointer will safely clean up the result
-     */
-    const(CPointer) getraw(K)(K key, size_t keylen, const(ReadOptions) opt = DefaultReadOptions)
-        if(isPointer!K)
+    auto getraw(const(Slice) key, const(ReadOptions) opt = DefaultReadOptions)
     {
         if(!isOpen) throw new LeveldbException(`Not connected to a valid db`);
 
@@ -428,9 +248,10 @@ public:
         scope(failure) if(errptr) leveldb_free(errptr);
 
         size_t vallen;
-        auto val = leveldb_get(_db, opt.ptr, cast(const(char*))key, keylen, &vallen, &errptr);
+        void* val = leveldb_get(_db, opt.ptr, key.ptr!(const(char*)), key.length, &vallen, &errptr);
+        scope(failure) if(val) leveldb_free(val);
         if(errptr) throw new LeveldbException(errptr);
-        return new CPointer(val, vallen);
+        return Slice(val, vallen, true);
     }
 
     /**
@@ -440,14 +261,14 @@ public:
      *
      * Example:
      ---
-     Options opt;
+     auto opt = new Options;
      opt.create_if_missing = true;
-     DB db(opt, "/my/db/")
+     auto db = new DB(opt, "/my/db/");
      // Unsafe banking example
-     WriteBatch batch;
+     auto batch = new WriteBatch;
 
-     double joe = db.get("Joe").as!double;
-     double sally = db.get("Sally").as!double;
+     double joe = db.getraw(Slice("Joe")).as!double;
+     double sally = db.getraw(Slice("Sally")).as!double;
 
      joe -= 10.00;
      sally += 10.00;
@@ -455,8 +276,8 @@ public:
         joe -= 30.00; // overdraft fee
 
      // submit the put in a single update
-     batch.put("Joe", &joe, joe.sizeof);
-     batch.put("Sally", &sally, sally.sizeof);
+     batch.put(Slice("Joe"), Slice(joe));
+     batch.put(Slice("Sally"), Slice(sally));
      db.write(batch);
      ---
      * Throws: LeveldbException
@@ -514,19 +335,19 @@ public:
      *
      * Example:
      ---
-     Options opt;
+     auto opt = new Options;
      opt.create_if_missing = true;
-     DB db(opt, "/my/db/")
+     auto db = new DB(opt, "/my/db/")
 
      auto snap = db.snapshot;
-     db.put("Future", "Stuff");
+     db.put(Slice("Future"), Slice("Stuff"));
 
-     ReadOptions ro;
+     auto ro = new ReadOptions;
      ro.snapshot(snap);
 
      string str;
-     assert(db.get("Future", str));
-     assert(!db.get("Future", str, ro));
+     assert(db.get(Slice("Future"), str));
+     assert(!db.get(Slice("Future"), str, ro));
      ---
      * Throws: LeveldbException
      */
@@ -565,8 +386,7 @@ public:
         {
             return _snap !is null;
         }
-    }
-
+    } // SnapShot
 
     /**
      * DB Iterator
@@ -575,14 +395,14 @@ public:
      *
      * Example:
      ---
-     Options opt;
+     auto opt = new Options;
      opt.create_if_missing = true;
-     DB db(opt, "/my/db/")
+     auto db = new DB(opt, "/my/db/")
 
      auto it = db.iterator;
-     foreach(string key, string value; it)
+     foreach(Slice key, Slice value; it)
      {
-        writeln(key, " - ", value);
+        writeln(key.as!string, " - ", value.as!string);
      }
     
      ---
@@ -618,7 +438,7 @@ public:
             }
         }
 
-        @property 
+        @property
         bool valid() inout
         {
             return cast(bool)leveldb_iter_valid(_iter);
@@ -637,16 +457,9 @@ public:
         }
 
         @property
-        void seek(K)(K[] key)
+        void seek(Slice key)
         {
-            seek(key.ptr, key.length * K.sizeof);
-        }
-
-        @property
-        void seek(K)(K key, size_t keylen)
-            if(isPointer!K)
-        {
-            leveldb_iter_seek(_iter, key, keylen);
+            leveldb_iter_seek(_iter, key.ptr!(const(char*)), key.length);
         }
 
         @property
@@ -662,23 +475,21 @@ public:
         }
 
         @property
-        K key(K)()
-            if(__traits(compiles, to!K(['a'])))
+        Slice key()
         {
             size_t vallen;
-            auto val = leveldb_iter_key(_iter, &vallen);
-            scope(exit) leveldb_free(cast(void*)val);
-            return to!K(val[0..vallen]);
+            void* val = cast(void*)leveldb_iter_key(_iter, &vallen);
+            scope(failure) leveldb_free(val);
+            return Slice(val, vallen, false);
         }
 
         @property
-        V value(V)()
-            if(__traits(compiles, to!V(['a'])))
+        value()
         {
             size_t vallen;
-            auto val = leveldb_iter_value(_iter, &vallen);
-            scope(exit)leveldb_free(cast(void*)val);
-            return to!V(val[0..vallen]);
+            void* val = cast(void*)leveldb_iter_value(_iter, &vallen);
+            scope(failure) leveldb_free(val);
+            return Slice(val, vallen, false);
         }
 
         @property
@@ -690,55 +501,77 @@ public:
             return to!string(errptr);
         }
 
-        int opApply(int delegate(string) dg)
+        int opApply(int delegate(Slice) dg)
         {
             int result = 0;
+            seek_to_first;
             while(valid)
             {
-                if((result = dg(value!string)) == 0 )
+                if((result = dg(value)) == 0 )
                     break;
                 next;
             }
             return result;
         }
 
-        int opApplyReverse(int delegate(string) dg)
+        int opApplyReverse(int delegate(Slice) dg)
         {
             int result = 0;
+            seek_to_last;
             while(valid)
             {
-                if((result = dg(value!string)) == 0 )
+                if((result = dg(value)) == 0 )
                     break;
                 prev;
             }
             return result;
         }
 
-        int opApply(int delegate(string, string) dg)
+        int opApply(int delegate(Slice, Slice) dg)
         {
             int result = 0;
+            seek_to_first;
             while(valid)
             {
-                if((result = dg(key!string, value!string)) == 0 )
+                if((result = dg(key, value)) == 0 )
                     break;
                 next;
             }
             return result;
         }
 
-        int opApplyReverse(int delegate(string, string) dg)
+        int opApplyReverse(int delegate(Slice, Slice) dg)
         {
             int result = 0;
+            seek_to_last;
             while(valid)
             {
-                if((result = dg(key!string, value!string)) == 0 )
+                if((result = dg(key, value)) == 0 )
                     break;
                 prev;
             }
             return result;
         }
+    } //Iterator
+
+    static void destroyDB(const Options opt, string path)
+    {
+        char* errptr = null;
+        scope(exit) if(errptr) leveldb_free(errptr);
+        leveldb_destroy_db(opt.ptr, toStringz(path), &errptr);
+        if(errptr) throw new LeveldbException(errptr);
+    }
+
+    static void repairDB(const Options opt, string path)
+    {
+        char* errptr = null;
+        scope(exit) if(errptr) leveldb_free(errptr);
+
+        leveldb_repair_db(opt.ptr, toStringz(path), &errptr);
+        if(errptr) throw new LeveldbException(errptr);
     }
 } // class DB
+
 
 // Basic open, write string close, open get string, del string, get it
 unittest
@@ -747,32 +580,53 @@ unittest
     opt.create_if_missing = true;
     auto db = new DB(opt, tempPath ~ `s1`);
     assert(db.isOpen);
-    db.put("Hello", "World");
+    db.put(Slice("Hello"), Slice("World"));
     db.close;
     assert(!db.isOpen);
     db.open(opt, tempPath ~ `s1`);
     assert(db.isOpen);
     string ret;
-    assert(db.get("Hello", ret));
+    assert(db.get(Slice("Hello"), ret));
     assert(ret == "World");
-    db.del("Hello");
-    assert(!db.get("Hello", ret));
+    db.del(Slice("Hello"));
+    assert(!db.get(Slice("Hello"), ret));
     assert(ret != "World");
     destroy(db); // force destructor to be called
 }
 
-// Test value as a pointer
+// Test raw get
+unittest
+{
+    import std.math;
+    auto opt = new Options;
+    opt.create_if_missing = true;
+    auto db = new DB(opt, tempPath ~ `s1`);
+    auto pi = PI;
+    db.put(Slice("PI"), Slice(pi));
+    assert(db.get(Slice("PI"), pi));
+    assert(pi == PI);
+    assert(!db.getraw(Slice("PI2")).ok);
+    auto pi2 = db.getraw(Slice("PI"));
+    assert(pi2.ok);
+    assert(pi2.length == pi.sizeof);
+    assert(pi2.as!real == pi);
+}
+
+// Test raw get
 unittest
 {
     auto opt = new Options;
     opt.create_if_missing = true;
-    auto db = new DB(opt, tempPath ~ `s1`);
-    double pi = 3.1456;
-    db.put("PI", &pi, pi.sizeof);
-    auto pi2 = db.getraw("PI");
+    auto db = new DB(opt, tempPath ~ `s4`);
+    db.put(Slice("SCORE"), Slice.Ref(234L));
+    long pi;
+    assert(db.get(Slice("SCORE"), pi));
+    assert(pi == 234);
+    assert(!db.getraw(Slice("SCORE2")).ok);
+    auto pi2 = db.getraw(Slice("SCORE"));
     assert(pi2.ok);
     assert(pi2.length == pi.sizeof);
-    assert(pi2.as!double == pi);
+    assert(pi2.as!long == 234L);
 }
 
 // test structs as key and value
@@ -791,17 +645,17 @@ unittest
     auto db = new DB(opt, tempPath ~ `s2`);
     auto p = Point(55, 44);
     Point p2;
-    db.put(&uuid, uuid.sizeof, &p, p.sizeof);
-    auto o1 = db.getraw(&uuid, uuid.sizeof);
+    db.put(Slice(uuid), Slice(p));
+    auto o1 = db.getraw(Slice(uuid));
     assert(o1.as!Point.x == p.x);
     assert(o1.as!Point.y == p.y);
-    assert(db.get(&uuid, uuid.sizeof, p2));
-    auto o2 = db.getraw(&uuid, uuid.sizeof);
-    db.del(&uuid, uuid.sizeof);
+    assert(db.get(Slice(uuid), p2));
+    auto o2 = db.getraw(Slice(uuid));
+    db.del(Slice(uuid));
     GC.collect();
     assert(p2.x == p.x);
     assert(p2.y == p.y);
-    assert(!db.get(&uuid, uuid.sizeof, p2));
+    assert(!db.get(Slice(uuid), p2));
 }
 
 // test structs as key and classes as values
@@ -825,171 +679,18 @@ unittest
     auto db = new DB(opt, tempPath ~ `c1`);
     auto p = new Point(55, 44);
     Point p2;
-    db.put(&uuid, uuid.sizeof, &p, p.sizeof);
-    db.put("X", &p, p.sizeof);
-    auto o1 = db.getraw(&uuid, uuid.sizeof);
+    db.put(Slice(uuid), Slice(p));
+    db.put(Slice("X"), Slice(p));
+    auto o1 = db.getraw(Slice(uuid));
     assert(o1.as!Point.x == p.x);
     assert(o1.as!Point.y == p.y);
-    assert(db.get(&uuid, uuid.sizeof, p2));
-    auto o2 = db.getraw(&uuid, uuid.sizeof);
-    db.del(&uuid, uuid.sizeof);
+    assert(db.get(Slice(uuid), p2));
+    auto o2 = db.getraw(Slice(uuid));
+    db.del(Slice(uuid));
     GC.collect();
     assert(p2.x == p.x);
     assert(p2.y == p.y);
 }
-
-/**
- * Holds a pointer returned from leveldb, frees
- * the memory on destruction.
- */
-class CPointer
-{
-private:
-    void* _ptr;
-    size_t len;
-
-public:
-    this(P)(P* p, size_t l)
-    {
-        _ptr = p;
-        len = l;
-    }
-
-    ~this()
-    {
-        leveldb_free(_ptr);
-    }
-
-    @property
-    inout(T) ptr(T)() inout
-        if(isPointer(T))
-    {
-        return _ptr;
-    }
-
-    @property
-    inout(T) to(T)() inout
-        if(__traits(compiles, to!T(&_ptr)))
-    {
-        return to!T(&_ptr);
-    }
-
-    @property
-    inout(T) as(T)() inout
-        if(__traits(compiles, *(cast(T*)_ptr)))
-    {
-        return *(cast(inout(T*))_ptr);
-    }
-
-    @property
-    size_t length() inout
-    {
-        return len;
-    }
-
-    @property
-    bool ok() inout
-    {
-        return _ptr !is null;
-    }
-}
-
-class WriteBatch
-{
-private:
-    leveldb_writebatch_t _ptr;
-
-package:
-    @property
-    inout(leveldb_writebatch_t) ptr() inout
-    {
-        return _ptr;
-    }
-
-private:
-    this()
-    {
-        if((_ptr = leveldb_writebatch_create()) is null)
-            throw new LeveldbException("Failed to create batch writer");
-    }
-
-    ~this()
-    {
-        if(valid)
-        {
-            auto tmp = _ptr;
-            _ptr = null;
-            leveldb_writebatch_destroy(tmp);
-        }
-    }
-
-    @property
-    void clear()
-    {
-        leveldb_writebatch_clear(_ptr);
-    }
-
-    void put(K, V)(K[] key, V[] val)
-    {
-        put(key.ptr, key.length * K.size_t, val.ptr, val.length * V.sizeof);
-    }
-
-    void put(K, V)(K key, size_t keylen, V[] val)
-        if(isPointer!K)
-    {
-        put(key.ptr, key.length * K.size_t, valptr, vallen);
-
-    }
-
-    void put(K, V)(K[] key, V val, size_t vallen)
-        if(isPointer!V)
-    {
-        put(key, keylen, val.ptr, val.length * V.sizeof);
-    }
-
-    void put(K, V)(K key, size_t keylen, V val, size_t vallen)
-        if(isPointer!K && isPointer!V)
-    {
-        leveldb_writebatch_put(_ptr, cast(const(char*))key, keylen, cast(const(char*))val, vallen);
-    }
-
-
-
-    void del(K)(K[] key)
-    {
-        del(key.ptr, key.length * K.sizeof);
-    }
-
-    void del(K)(K key, size_t keylen)
-    {
-        leveldb_writebatch_delete(_ptr, cast(const(char*))key, keylen);
-    }
-
-    void iterate(Visitor visitor)
-    {
-        leveldb_writebatch_iterate(_ptr, cast(void*)&visitor,
-            &batchPut, &batchDel);
-    }
-
-    void iterate(void delegate(const(char[]) key, const(char[]) value) puts,
-        void delegate(const(char[]) key) dels)
-    {
-        iterate(Visitor(puts, dels));
-    }
-
-    @property
-    bool valid() inout
-    {
-        return _ptr !is null;
-    }
-
-    static struct Visitor
-    {
-        void delegate(const(char[]) key, const(char[]) value) puts;
-        void delegate(const(char[]) key) dels;
-    }
-} // WriteBatch
-
 
 unittest
 {
@@ -997,52 +698,87 @@ unittest
     opt.create_if_missing = true;
     auto db = new DB(opt, tempPath ~ `wb1`);
 
-    db.put("Joe", 25);
-    db.put("Sally", 905);
-    int i;
-    assert(db.get("Joe", i));
-    assert(i == 25);
-    assert(db.get("Sally", i));
-    assert(i == 905);
+    db.put(Slice("Joe"), Slice.Ref(25));
+    db.put(Slice("Sally"), Slice.Ref(905));
+    assert(db.getraw(Slice("Joe")).as!int == 25);
+    assert(db.getraw(Slice("Sally")).as!int == 905);
 
+    auto joe = db.getraw(Slice("Joe")).as!int - 10;
+    auto sally = db.getraw(Slice("Sally")).as!int + 10;
 
     auto wb = new WriteBatch();
-    //wb.put()
-
-    auto wo = new WriteOptions();
-
-
+    wb.put(Slice("Joe"), Slice(joe));
+    wb.put(Slice("Sally"), Slice(sally));
+    assert(db.getraw(Slice("Joe")).as!int == 25);
+    assert(db.getraw(Slice("Sally")).as!int == 905);
+    wb.clear;
+    db.write(wb);
+    assert(db.getraw(Slice("Joe")).as!int == 25);
+    assert(db.getraw(Slice("Sally")).as!int == 905);
+    wb.put(Slice("Joe"), Slice(joe));
+    wb.put(Slice("Sally"), Slice(sally));
+    db.write(wb);
+    assert(db.getraw(Slice("Joe")).as!int == joe);
+    assert(db.getraw(Slice("Sally")).as!int == sally);
 }
 
-
-void destoryDB(const Options opt, string path)
+unittest
 {
-    char* errptr = null;
-    scope(failure) if(errptr) leveldb_free(errptr);
-    leveldb_destroy_db(opt.ptr, toStringz(path), &errptr);
-    if(errptr) throw new LeveldbException(errptr);
+    auto opt = new Options;
+    opt.create_if_missing = true;
+    DB.destroyDB(opt, tempPath ~ `ss1`);
+    auto db = new DB(opt, tempPath ~ `ss1`);
+    auto snap = db.snapshot;
+    assert(snap);
+    db.put(Slice("Future"), Slice("Stuff"));
+    auto ro = new ReadOptions;
+    ro.snapshot(snap);
+    string str;
+    assert(db.get(Slice("Future"), str));
+    assert(str == "Stuff");
+    assert(!db.get(Slice("Future"), str, ro));
+    assert(str == "");
+    assert(db.get(Slice("Future"), str));
+    snap = db.snapshot;
+    ro.snapshot(snap);
+    assert(db.get(Slice("Future"), str, ro));
 }
 
-void repairDB(const Options opt, string path)
+unittest
 {
-    char* errptr = null;
-    scope(failure) if(errptr) leveldb_free(errptr);
+    auto opt = new Options;
+    opt.create_if_missing = true;
+    auto db = new DB(opt, tempPath ~ `it1`);
+    db.put(Slice("Hello"), Slice("World"));
 
-    leveldb_repair_db(opt.ptr, toStringz(path), &errptr);
-    if(errptr) throw new LeveldbException(errptr);
-}
+    auto it = db.iterator;
+    foreach(Slice key, Slice value; it)
+    {
+        assert(key.as!string == "Hello");
+        assert(value.as!string == "World");
+    }
+    foreach_reverse(Slice key, Slice value; it)
+    {
+        assert(key.as!string == "Hello");
+        assert(value.as!string == "World");
+    }
 
-private:
-extern(C):
 
-void batchPut(void* state, const char* k, size_t klen, const char* v, size_t vlen)
-{
-    auto visitor = cast(WriteBatch.Visitor*)state;
-    visitor.puts(k[0..klen], v[0..vlen]);
-}
+    db.close;
+    DB.destroyDB(opt, tempPath ~ `it1`);
+    db.open(opt, tempPath ~ `it1`);
+    foreach(int i; 1..10)
+    {
+        db.put(Slice(i), Slice(i));
+    }
+    it = db.iterator;
+    foreach(Slice key, Slice value; it)
+    {
+        assert(value.as!int == key.as!int);
+    }
+    foreach_reverse(Slice key, Slice value; it)
+    {
+        assert(value.as!int == key.as!int);
+    }
 
-void batchDel(void* state, const char* k, size_t klen)
-{
-    auto visitor = cast(WriteBatch.Visitor*)state;
-    visitor.dels(k[0..klen]);
 }
