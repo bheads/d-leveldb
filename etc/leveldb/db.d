@@ -7,6 +7,16 @@
  * License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>.
  * Authors: Byron Heads
  *
+ * Example:
+ ---
+ auto opt = new Options;
+ opt.create_if_missing = true;
+ auto db = new DB(opt, "/my/db/");
+ db.put(Slice("PI"), Slice.Ref!double(3.14));
+ double pi;
+ enforce(db.get(Slice("PI"), pi));
+ assert(pi == 3.14);
+ ---
  * Todo: Add searching and transactions
 */
 /*          Copyright  © 2013 Byron Heads
@@ -32,9 +42,10 @@ version(unittest)
     const __gshared const(string) tempPath;
     static this()
     {
-        tempPath = tempDir() ~ `/unittest_d_leveldb/`;
+        tempPath = tempDir() ~ `unittest_d_leveldb/`;
         try
         {
+            writeln("Temp Path: ", tempPath);
             mkdirRecurse(tempPath);
         } catch(Exception e) {}
     }
@@ -120,9 +131,8 @@ public:
     {
         if(isOpen)
         {
-            auto tmp = _db;
+            leveldb_close(_db);
             _db = null;
-            leveldb_close(tmp);
         }
     }
 
@@ -329,6 +339,29 @@ public:
     }
 
     /**
+     * Short cut iterator, treate the db like an iterator
+     */
+    int opApply(int delegate(Slice) dg)
+    {
+        return iterator.opApply(dg);
+    }
+
+    int opApplyReverse(int delegate(Slice) dg)
+    {
+        return iterator.opApplyReverse(dg);
+    }
+
+    int opApply(int delegate(Slice, Slice) dg)
+    {
+        return iterator.opApply(dg);
+    }
+
+    int opApplyReverse(int delegate(Slice, Slice) dg)
+    {
+        return iterator.opApplyReverse(dg);
+    }
+
+    /**
      * DB Snapshot
      *
      * Snapshots can be applied to ReadOptions.  Created from a DB object
@@ -374,9 +407,8 @@ public:
         {
             if(valid)
             {
-                auto tmp = _snap;
+                leveldb_release_snapshot(_db, _snap);
                 _snap = null;
-                leveldb_release_snapshot(_db, tmp);
             }
         }
 
@@ -425,73 +457,89 @@ public:
         {
             if((_iter = leveldb_create_iterator(_db, opt.ptr)) is null)
                 throw new LeveldbException("Failed to create iterator");
-            seek_to_first;
         }
 
         ~this()
         {
-            if(_iter !is null)
+            if(ok)
             {
-                auto tmp = _iter;
+                leveldb_iter_destroy(_iter);
                 _iter = null;
-                leveldb_iter_destroy(tmp);
             }
         }
 
+        /// Iterator created
+        @property
+        bool ok() inout
+        {
+            return _iter !is null;
+        }
+
+        /// Iterator has more data to read
         @property
         bool valid() inout
         {
             return cast(bool)leveldb_iter_valid(_iter);
         }
 
+        /// Seek to front of data
         @property 
         void seek_to_first()
         {
             leveldb_iter_seek_to_first(_iter);
         }
 
+        /// Seek to end of data
         @property 
         void seek_to_last()
         {
             leveldb_iter_seek_to_last(_iter);
         }
 
+        /// Seek to given slice.
         @property
         void seek(Slice key)
         {
             leveldb_iter_seek(_iter, key.ptr!(const(char*)), key.length);
         }
 
+        /// Move to next item
         @property
         void next()
         {
             leveldb_iter_next(_iter);
         }
 
+        /// Move to previous item
         @property
         void prev()
         {
             leveldb_iter_prev(_iter);
         }
 
+        /// Return thr current key
         @property
         Slice key()
         {
+            debug if(!valid) throw new LeveldbException("Accessing invalid iterator");
             size_t vallen;
             void* val = cast(void*)leveldb_iter_key(_iter, &vallen);
-            scope(failure) leveldb_free(val);
+            scope(failure) if(val) leveldb_free(val);
             return Slice(val, vallen, false);
         }
 
+        /// Return the current value
         @property
         value()
         {
+            debug if(!valid) throw new LeveldbException("Accessing invalid iterator");
             size_t vallen;
             void* val = cast(void*)leveldb_iter_value(_iter, &vallen);
-            scope(failure) leveldb_free(val);
+            scope(failure) if(val) leveldb_free(val);
             return Slice(val, vallen, false);
         }
 
+        /// Gets the current error status of the iterator
         @property
         string status() inout
         {
@@ -501,15 +549,14 @@ public:
             return to!string(errptr);
         }
 
+        /// For each on iterator
         int opApply(int delegate(Slice) dg)
         {
             int result = 0;
-            seek_to_first;
-            while(valid)
+            for(seek_to_first; valid; next)
             {
-                if((result = dg(value)) == 0 )
-                    break;
-                next;
+                result = dg(value);
+                if(result) return result;
             }
             return result;
         }
@@ -517,12 +564,10 @@ public:
         int opApplyReverse(int delegate(Slice) dg)
         {
             int result = 0;
-            seek_to_last;
-            while(valid)
+            for(seek_to_last; valid; prev)
             {
-                if((result = dg(value)) == 0 )
-                    break;
-                prev;
+                result = dg(value);
+                if(result) return result;
             }
             return result;
         }
@@ -530,12 +575,10 @@ public:
         int opApply(int delegate(Slice, Slice) dg)
         {
             int result = 0;
-            seek_to_first;
-            while(valid)
+            for(seek_to_first; valid; next)
             {
-                if((result = dg(key, value)) == 0 )
-                    break;
-                next;
+                result = dg(key, value);
+                if(result) return result;
             }
             return result;
         }
@@ -543,17 +586,18 @@ public:
         int opApplyReverse(int delegate(Slice, Slice) dg)
         {
             int result = 0;
-            seek_to_last;
-            while(valid)
+            for(seek_to_last; valid; prev)
             {
-                if((result = dg(key, value)) == 0 )
-                    break;
-                prev;
+                result = dg(key, value);
+                if(result) return result;
             }
             return result;
         }
     } //Iterator
 
+    /**
+     * Destory/delete a non-locked leveldb
+     */
     static void destroyDB(const Options opt, string path)
     {
         char* errptr = null;
@@ -561,6 +605,10 @@ public:
         leveldb_destroy_db(opt.ptr, toStringz(path), &errptr);
         if(errptr) throw new LeveldbException(errptr);
     }
+
+    /**
+     * Attempt to repair a non-locked leveldb
+     */
 
     static void repairDB(const Options opt, string path)
     {
@@ -748,7 +796,8 @@ unittest
 {
     auto opt = new Options;
     opt.create_if_missing = true;
-    auto db = new DB(opt, tempPath ~ `it1`);
+    DB.destroyDB(opt, tempPath ~ `it1/`);
+    auto db = new DB(opt, tempPath ~ `it1/`);
     db.put(Slice("Hello"), Slice("World"));
 
     auto it = db.iterator;
@@ -763,22 +812,76 @@ unittest
         assert(value.as!string == "World");
     }
 
+    db.put(Slice.Ref(1), Slice.Ref(1));
+    it = db.iterator;
+    for(it.seek(Slice.Ref(1)); it.valid; it.next)
+    {
+        assert(it.key.ok);
+        assert(it.value.ok);
+    }
+}
 
-    db.close;
-    DB.destroyDB(opt, tempPath ~ `it1`);
-    db.open(opt, tempPath ~ `it1`);
+unittest
+{
+    auto opt = new Options;
+    opt.create_if_missing = true;
+    DB.destroyDB(opt, tempPath ~ `it2`);
+    auto db = new DB(opt, tempPath ~ `it2/`);
+    assert(db.isOpen);
     foreach(int i; 1..10)
     {
-        db.put(Slice(i), Slice(i));
+        db.put(Slice(i), Slice.Ref(i*2));
     }
-    it = db.iterator;
+    auto it = db.iterator;
+    
     foreach(Slice key, Slice value; it)
     {
-        assert(value.as!int == key.as!int);
+        assert(value.as!int == key.as!int * 2);
     }
     foreach_reverse(Slice key, Slice value; it)
     {
-        assert(value.as!int == key.as!int);
+        assert(value.as!int == key.as!int * 2);
     }
-
 }
+
+unittest
+{
+    auto opt = new Options;
+    opt.create_if_missing = true;
+    DB.destroyDB(opt, tempPath ~ `it3/`);
+    auto db = new DB(opt, tempPath ~ `it3/`);
+    db.put(Slice("Hello"), Slice("World"));
+
+    foreach(Slice key, Slice value; db)
+    {
+        assert(key.as!string == "Hello");
+        assert(value.as!string == "World");
+    }
+    foreach_reverse(Slice key, Slice value; db)
+    {
+        assert(key.as!string == "Hello");
+        assert(value.as!string == "World");
+    }
+}
+
+unittest
+{
+    auto opt = new Options;
+    opt.create_if_missing = true;
+    DB.destroyDB(opt, tempPath ~ `it4`);
+    auto db = new DB(opt, tempPath ~ `it4/`);
+    assert(db.isOpen);
+    foreach(int i; 1..10)
+    {
+        db.put(Slice(i), Slice.Ref(i*2));
+    }
+    foreach(Slice key, Slice value; db)
+    {
+        assert(value.as!int == key.as!int * 2);
+    }
+    foreach_reverse(Slice key, Slice value; db)
+    {
+        assert(value.as!int == key.as!int * 2);
+    }
+}
+

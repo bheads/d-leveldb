@@ -116,6 +116,7 @@ public:
             return as!T;
     }
 
+    /// Create a safe refrence for slicing, good for primitive type constants
     static Slice Ref(T)(T t)
     {
         align(1) struct Ref{ T t; }

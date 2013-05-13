@@ -42,9 +42,8 @@ public:
     {
         if(valid)
         {
-            auto tmp = _ptr;
+            leveldb_writebatch_destroy(_ptr);
             _ptr = null;
-            leveldb_writebatch_destroy(tmp);
         }
     }
 
