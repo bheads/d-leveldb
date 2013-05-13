@@ -17,7 +17,7 @@ void main()
 
     db.put(Slice("PI"), Slice.Ref(3.14));
 
-    foreach(Slice key, Slice val; db)
+    foreach(Slice key, Slice value; db)
     {
         if(key.as!string == "PI")
             writeln(key.as!string, ": ", value.as!double);
