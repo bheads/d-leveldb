@@ -242,15 +242,15 @@ public:
      opt.create_if_missing = true;
      auto db = new DB(opt, "/my/db/");
      auto uuid = UUID("8AB3060E-2cba-4f23-b74c-b52db3bdfb46");
-     db.put(Slice("My UUID"), Slice(uuid));
-     auto name = db.getraw(Slice("My UUID"));
+     db.put(Slice("My UUID"), Slice(uuid.data));
+     auto name = db.get_slice(Slice("My UUID"));
      assert(name.as!UUID == uuid);
      ---
      * Throws: LeveldbException
      * Returns: A Slice struct, this holds the returned pointer and size
      * Slice will safely clean up the result
      */
-    auto getraw(const(Slice) key, const(ReadOptions) opt = DefaultReadOptions)
+    auto get_slice(const(Slice) key, const(ReadOptions) opt = DefaultReadOptions)
     {
         if(!isOpen) throw new LeveldbException(`Not connected to a valid db`);
 
@@ -277,8 +277,8 @@ public:
      // Unsafe banking example
      auto batch = new WriteBatch;
 
-     double joe = db.getraw(Slice("Joe")).as!double;
-     double sally = db.getraw(Slice("Sally")).as!double;
+     double joe = db.get_slice(Slice("Joe")).as!double;
+     double sally = db.get_slice(Slice("Sally")).as!double;
 
      joe -= 10.00;
      sally += 10.00;
@@ -653,8 +653,8 @@ unittest
     db.put(Slice("PI"), Slice(pi));
     assert(db.get(Slice("PI"), pi));
     assert(pi == PI);
-    assert(!db.getraw(Slice("PI2")).ok);
-    auto pi2 = db.getraw(Slice("PI"));
+    assert(!db.get_slice(Slice("PI2")).ok);
+    auto pi2 = db.get_slice(Slice("PI"));
     assert(pi2.ok);
     assert(pi2.length == pi.sizeof);
     assert(pi2.as!real == pi);
@@ -670,8 +670,8 @@ unittest
     long pi;
     assert(db.get(Slice("SCORE"), pi));
     assert(pi == 234);
-    assert(!db.getraw(Slice("SCORE2")).ok);
-    auto pi2 = db.getraw(Slice("SCORE"));
+    assert(!db.get_slice(Slice("SCORE2")).ok);
+    auto pi2 = db.get_slice(Slice("SCORE"));
     assert(pi2.ok);
     assert(pi2.length == pi.sizeof);
     assert(pi2.as!long == 234L);
@@ -693,51 +693,17 @@ unittest
     auto db = new DB(opt, tempPath ~ `s2`);
     auto p = Point(55, 44);
     Point p2;
-    db.put(Slice(uuid), Slice(p));
-    auto o1 = db.getraw(Slice(uuid));
+    db.put(Slice(uuid.data), Slice(p));
+    auto o1 = db.get_slice(Slice(uuid.data));
     assert(o1.as!Point.x == p.x);
     assert(o1.as!Point.y == p.y);
-    assert(db.get(Slice(uuid), p2));
-    auto o2 = db.getraw(Slice(uuid));
-    db.del(Slice(uuid));
+    assert(db.get(Slice(uuid.data), p2));
+    auto o2 = db.get_slice(Slice(uuid.data));
+    db.del(Slice(uuid.data));
     GC.collect();
     assert(p2.x == p.x);
     assert(p2.y == p.y);
-    assert(!db.get(Slice(uuid), p2));
-}
-
-// test structs as key and classes as values
-unittest
-{
-    class Point
-    {
-        this(double x, double y)
-        {
-            this.x = x;
-            this.y = y;
-        }
-        double x, y;
-    }
-
-    import std.uuid;
-    auto uuid = randomUUID();
-
-    auto opt = new Options;
-    opt.create_if_missing = true;
-    auto db = new DB(opt, tempPath ~ `c1`);
-    auto p = new Point(55, 44);
-    Point p2;
-    db.put(Slice(uuid), Slice(p));
-    db.put(Slice("X"), Slice(p));
-    auto o1 = db.getraw(Slice(uuid));
-    assert(o1.as!Point.x == p.x);
-    assert(o1.as!Point.y == p.y);
-    assert(db.get(Slice(uuid), p2));
-    auto o2 = db.getraw(Slice(uuid));
-    db.del(Slice(uuid));
-    GC.collect();
-    assert(p2.x == p.x);
-    assert(p2.y == p.y);
+    assert(!db.get(Slice(uuid.data), p2));
 }
 
 unittest
@@ -748,26 +714,26 @@ unittest
 
     db.put(Slice("Joe"), Slice.Ref(25));
     db.put(Slice("Sally"), Slice.Ref(905));
-    assert(db.getraw(Slice("Joe")).as!int == 25);
-    assert(db.getraw(Slice("Sally")).as!int == 905);
+    assert(db.get_slice(Slice("Joe")).as!int == 25);
+    assert(db.get_slice(Slice("Sally")).as!int == 905);
 
-    auto joe = db.getraw(Slice("Joe")).as!int - 10;
-    auto sally = db.getraw(Slice("Sally")).as!int + 10;
+    auto joe = db.get_slice(Slice("Joe")).as!int - 10;
+    auto sally = db.get_slice(Slice("Sally")).as!int + 10;
 
     auto wb = new WriteBatch();
     wb.put(Slice("Joe"), Slice(joe));
     wb.put(Slice("Sally"), Slice(sally));
-    assert(db.getraw(Slice("Joe")).as!int == 25);
-    assert(db.getraw(Slice("Sally")).as!int == 905);
+    assert(db.get_slice(Slice("Joe")).as!int == 25);
+    assert(db.get_slice(Slice("Sally")).as!int == 905);
     wb.clear;
     db.write(wb);
-    assert(db.getraw(Slice("Joe")).as!int == 25);
-    assert(db.getraw(Slice("Sally")).as!int == 905);
+    assert(db.get_slice(Slice("Joe")).as!int == 25);
+    assert(db.get_slice(Slice("Sally")).as!int == 905);
     wb.put(Slice("Joe"), Slice(joe));
     wb.put(Slice("Sally"), Slice(sally));
     db.write(wb);
-    assert(db.getraw(Slice("Joe")).as!int == joe);
-    assert(db.getraw(Slice("Sally")).as!int == sally);
+    assert(db.get_slice(Slice("Joe")).as!int == joe);
+    assert(db.get_slice(Slice("Sally")).as!int == sally);
 }
 
 unittest

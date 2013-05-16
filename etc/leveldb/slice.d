@@ -15,7 +15,8 @@
 module etc.leveldb.slice;
 
 private import etc.leveldb.exceptions;
-private import std.traits : isPointer, isArray;
+private import std.traits : isArray, isStaticArray, isDynamicArray,
+                            isPointer, isBasicType, ForeachType;
 private import deimos.leveldb.leveldb : leveldb_free;
 
 /**
@@ -31,6 +32,7 @@ private:
     size_t len;
 
 package:
+    /// Used by DB class to hold leveldb raw pointers
     this(P = void*)(void* p, size_t l, bool free)
     {
         this.free = free;
@@ -38,28 +40,49 @@ package:
         len = l;
     }
 
+    /// Find the byte size of a valid Slice type
+    size_t size(P)(ref P p)
+    {
+        static if((isStaticArray!P && !isBanned!(ForeachType!P)) || isBasicType!P || isPODStruct!P) 
+            return P.sizeof;
+        else static if(isPointer!P) 
+            return size(*p);
+        else static if(isDynamicArray!P && !isBanned!(ForeachType!P))
+            return (p.length ? size(p[0]) * p.length : 0 );
+        else assert(false, "Not a valid type for leveldb slice: ref " ~ typeof(p).stringof);
+    }
+
+    /// Find the pointer of a valid Slice type
+    void* pointer(P)(ref P p)
+    {
+        static if((isArray!P && !isBanned!(ForeachType!P)))
+            return cast(void*)p.ptr;
+        else static if(isBasicType!P || isPODStruct!P)
+            return cast(void*)(&p);
+        else static if(isPointer!P) 
+            return pointer(*p);
+        else assert(false, "Not a valid type for leveldb slice: ref " ~ typeof(p).stringof);
+    }
+
 public:
     /// Takes reference
     this(P)(ref P p)
-        if(!isArray!P && !isPointer!P)
     {
-        _ptr = cast(void*)(&p);
-        len = P.sizeof;
+        this(pointer(p), size(p));
+    }
+
+    this(P)(in P p)
+        if(!__traits(isRef, p))
+    {
+        this(pointer(p), size(p));
     }
 
     /// Takes reference
-    this(P)(P* p, size_t l)
-        if(!isArray!P && !isPointer!P)
+    this(P)(P p, size_t l)
+        if(isPointer!P)
     {
         _ptr = cast(void*)p;
         len = l;
-    }
-
-    /// Leveldb Slice of an array/slice
-    this(A)(A[] a)
-    {
-        _ptr = cast(void*)a.ptr;
-        len = a.length * A.sizeof;
     }
 
     /// Calles free on leveldb raw memory
@@ -80,10 +103,16 @@ public:
     /// Get slice as a data type
     @property
     inout(T) as(T)() inout
-        if(!isPointer!T)
+        if(!isPointer!T && __traits(compiles, *(cast(inout(T*))_ptr)))
     {
         static if(isArray!T)
             return  cast(inout(T))(cast(char[])(_ptr)[0..length]);
+        else static if(is(T == class))
+        {
+            if(typeid(T).sizeof > length)
+                throw new LeveldbException("Casting size is larger then slice data");
+            return *(cast(inout(T*))_ptr);
+        }
         else
         {
             if(T.sizeof > length)
@@ -108,7 +137,6 @@ public:
 
     /// Slice casting
     inout(T) opCast(T)() inout
-        if(!isPointer!T)
     {
         static if(isPointer!T)
             return ptr!T;
@@ -119,9 +147,25 @@ public:
     /// Create a safe refrence for slicing, good for primitive type constants
     static Slice Ref(T)(T t)
     {
-        align(1) struct Ref{ T t; }
+        align(1) static struct Ref{ T t; }
         return Slice(new Ref(t), T.sizeof);
     }
+}
+
+template isBanned(T)
+{
+    static if(is(T == class) || isDynamicArray!T || isPointer!T)
+        enum isBanned = true;
+    else
+        enum isBanned = false;
+}
+
+template isPODStruct(T)
+{
+    static if(is(T == struct))
+        enum isPODStruct = __traits(isPOD, T);
+    else
+        enum isPODStruct = false;
 }
 
 
@@ -169,6 +213,7 @@ unittest
     auto p1 = Point!int(1, 2);
     auto s = Slice(p1);
     assert(s.ok);
+    assert(s.length == int.sizeof * 2);
     assert(s.as!(Point!int).x == 1);
     assert(s.as!(Point!int).y == 2);
     try
@@ -181,7 +226,12 @@ unittest
     {
         assert(false, "Should have thrown a LeveldbException");
     }
+
+    s = Slice(new Point!real(10, 12));
+    assert(s.length == real.sizeof * 2);
 }
+
+
 
 unittest
 {
