@@ -11,11 +11,11 @@ void main()
     opt.create_if_missing = true;
 
     auto db = new DB(opt, "path/to/db");
-    db.put(Slice("Hello"), Slice("World"));
+    db.put("Hello", "World");
 
-    assert(db.getraw(Slice("Hello")).as!string == "World");
+    assert(db.get_slicew("Hello").as!string == "World");
 
-    db.put(Slice("PI"), Slice.Ref(3.14));
+    db.put("PI", 3.14);
 
     foreach(Slice key, Slice value; db)
     {
