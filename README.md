@@ -13,7 +13,7 @@ void main()
     auto db = new DB(opt, "path/to/db");
     db.put("Hello", "World");
 
-    assert(db.get_slicew("Hello").as!string == "World");
+    assert(db.get_slice("Hello").as!string == "World");
 
     db.put("PI", 3.14);
 
