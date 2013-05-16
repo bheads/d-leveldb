@@ -16,7 +16,7 @@
 module etc.leveldb.writebatch;
 
 private import etc.leveldb.exceptions,
-    etc.leveldb.slice;
+                etc.leveldb.slice;
 private import deimos.leveldb.leveldb;
 
 class WriteBatch
@@ -53,15 +53,30 @@ public:
         leveldb_writebatch_clear(_ptr);
     }
 
-    void put(Slice key, Slice val)
+    void put(K, V)(K key, V val)
     {
-        leveldb_writebatch_put(_ptr, key.ptr!(const(char*)), key.length, 
-                val.ptr!(const(char*)), val.length);
+        static if(__traits(isSame, K, Slice) && __traits(isSame, V, Slice))
+            put_raw(key.ptr!(const(char*)), key.length, val.ptr!(const(char*)), val.length);
+        else static if(!__traits(isSame, K, Slice) && __traits(isSame, V, Slice))
+            put_raw(cast(const(char*))pointer(key), size(key), val.ptr!(const(char*)), val.length);
+        else static if(__traits(isSame, K, Slice) && !__traits(isSame, V, Slice))
+            put_raw(key.ptr!(const(char*)), key.length, cast(const(char*))pointer(val), size(val));
+        else
+            put_raw(cast(const(char*))pointer(key), size(key), cast(const(char*))pointer(val), size(val));
     }
 
-    void del(Slice key)
+    private
+    void put_raw(const(char*) key, size_t keylen, const(char*)val, size_t vallen)
     {
-        leveldb_writebatch_delete(_ptr, key.ptr!(const(char*)), key.length);
+        leveldb_writebatch_put(_ptr, key, keylen, val, vallen);
+    }
+
+    void del(T)(T key)
+    {
+        static if(__traits(isSame, T, Slice))
+            leveldb_writebatch_delete(_ptr, key.ptr!(const(char*)), key.length);
+        else
+            leveldb_writebatch_delete(_ptr, cast(const(char*))pointer(key), size(key));
     }
 
     void iterate(Visitor visitor)

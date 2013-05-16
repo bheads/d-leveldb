@@ -144,18 +144,36 @@ public:
      auto opt = new Options;
      opt.create_if_missing = true;
      auto db = new DB(opt, "/my/db/");
-     db.put(Slice("User1"), Slice("John Doe"));
+     db.put(Slice("User1"), "John Doe");
      ---
      * Throws: LeveldbException
      */
-    void put(const(Slice) key, const(Slice) val, const(WriteOptions) opt = DefaultWriteOptions)
+    void put(K, V)(K key, V val, const(WriteOptions) opt = DefaultWriteOptions)
+    {
+        static if(__traits(isSame, K, Slice) && __traits(isSame, V, Slice))
+            put_raw(key.ptr!(const(char*)), key.length, val.ptr!(const(char*)), val.length, opt);
+        else static if(!__traits(isSame, K, Slice) && __traits(isSame, V, Slice))
+            put_raw(cast(const(char*))pointer(key), size(key), val.ptr!(const(char*)), val.length, opt);
+        else static if(__traits(isSame, K, Slice) && !__traits(isSame, V, Slice))
+            put_raw(key.ptr!(const(char*)), key.length, cast(const(char*))pointer(val), size(val), opt);
+        else
+            put_raw(cast(const(char*))pointer(key), size(key), cast(const(char*))pointer(val), size(val), opt);
+    }
+
+    /**
+     * Inserts/Updates a given value at a given key.  This is the real call to leveldb
+     *
+     * Throws: LeveldbException
+     */
+    private
+    void put_raw(const(char*) key, size_t keylen, const(char*) val, size_t vallen, const(WriteOptions) opt)
     {
         if(!isOpen) throw new LeveldbException(`Not connected to a valid db`);
 
         char* errptr = null;
         scope(failure) if(errptr) leveldb_free(errptr);
 
-        leveldb_put(_db, opt.ptr, key.ptr!(const(char*)), key.length, val.ptr!(const(char*)), val.length, &errptr);
+        leveldb_put(_db, opt.ptr, key, keylen, val, vallen, &errptr);
         if(errptr) throw new LeveldbException(errptr);
     }
 
@@ -167,19 +185,33 @@ public:
      auto opt = new Options;
      opt.create_if_missing = true;
      auto db = new DB(opt, "/my/db/");
-     db.put(Slice("User1"), Slice("John Doe"));
-     db.del(Slice("User1"));
+     db.put("User1", Slice("John Doe"));
+     db.del("User1");
      ---
      * Throws: LeveldbException
      */
-    void del(const(Slice) key, const(WriteOptions) opt = DefaultWriteOptions)
+    void del(T)(T key, const(WriteOptions) opt = DefaultWriteOptions)
+    {
+        static if(__traits(isSame, T, Slice))
+            del_raw(key.ptr!(const(char*)), key.length, opt);
+        else
+            del_raw(cast(const(char*))pointer(key), size(key), opt);
+    }
+
+    /**
+     * Deletes a key from the db.  Calles leveldb_delete
+     *
+     * Throws: LeveldbException
+     */
+    private
+    void del_raw(const(char*) key, size_t keylen, const(WriteOptions) opt)
     {
         if(!isOpen) throw new LeveldbException(`Not connected to a valid db`);
         
         char* errptr = null;
         scope(failure) if(errptr) leveldb_free(errptr);
 
-        leveldb_delete(_db, opt.ptr, key.ptr!(const(char*)), key.length, &errptr);
+        leveldb_delete(_db, opt.ptr, key, keylen, &errptr);
         if(errptr) throw new LeveldbException(errptr);
     }
 
@@ -194,15 +226,32 @@ public:
      auto opt = new Options;
      opt.create_if_missing = true;
      auto db = new DB(opt, "/my/db/");
-     db.put(Slice("User1"), Slice("John Doe"));
+     db.put("User1", Slice("John Doe"));
      string name;
-     enforce(db.get(slice("User1"), name));
+     enforce(db.get("User1", name));
      assert(name == "John Doe");
      ---
      * Throws: LeveldbException
      * Returns: true if the key was found in the DB
      */
-    bool get(V)(const(Slice) key, out V value, const(ReadOptions) opt = DefaultReadOptions)
+    bool get(T, V)(T key, out V value, const(ReadOptions) opt = DefaultReadOptions)
+    {
+        static if(__traits(isSame, T, Slice))
+            return get_raw(key.ptr!(const(char*)), key.length, value, opt);
+        else
+            return get_raw(cast(const(char*))pointer(key), size(key), value, opt);
+    }
+
+    /**
+     * Gets an entry from the DB
+     *
+     * Calls leveldb_get
+     * V must be convertable from char array.
+     *
+     * Throws: LeveldbException
+     * Returns: true if the key was found in the DB
+     */
+    bool get_raw(V)(const(char*) key, size_t keylen, out V value, const(ReadOptions) opt)
         if(!is(V == const(ReadOptions)))
     {
         if(!isOpen) throw new LeveldbException(`Not connected to a valid db`);
@@ -211,7 +260,7 @@ public:
         scope(failure) if(errptr) leveldb_free(errptr);
 
         size_t vallen;
-        auto val = leveldb_get(_db, opt.ptr, key.ptr!(const(char*)), key.length, &vallen, &errptr);
+        auto val = leveldb_get(_db, opt.ptr, key, keylen, &vallen, &errptr);
         scope(exit) if(val) leveldb_free(val);
         if(errptr) throw new LeveldbException(errptr);
         if(val !is null)
@@ -232,9 +281,7 @@ public:
     }
 
     /**
-     * Gets an entry from the DB
-     *
-     * Only accepts an array for the key.
+     * Gets an entry from the DB as a Slice.
      *
      * Example:
      ---
@@ -242,15 +289,34 @@ public:
      opt.create_if_missing = true;
      auto db = new DB(opt, "/my/db/");
      auto uuid = UUID("8AB3060E-2cba-4f23-b74c-b52db3bdfb46");
-     db.put(Slice("My UUID"), Slice(uuid.data));
-     auto name = db.get_slice(Slice("My UUID"));
+     db.put("My UUID", uuid.data);
+     auto name = db.get_slice("My UUID");
      assert(name.as!UUID == uuid);
      ---
      * Throws: LeveldbException
      * Returns: A Slice struct, this holds the returned pointer and size
      * Slice will safely clean up the result
      */
-    auto get_slice(const(Slice) key, const(ReadOptions) opt = DefaultReadOptions)
+    auto get_slice(T)(T key, const(ReadOptions) opt = DefaultReadOptions)
+    {
+        static if(__traits(isSame, T, Slice))
+            return get_slice_raw(key.ptr!(const(char*)), key.length, opt);
+        else
+            return get_slice_raw(cast(const(char*))pointer(key), size(key), opt);
+    }
+
+    /**
+     * Gets an entry from the DB as a Slice.
+     *
+     * Calles leveldb_get
+     *
+     * Example:
+     * Throws: LeveldbException
+     * Returns: A Slice struct, this holds the returned pointer and size
+     * Slice will safely clean up the result
+     */
+    private
+    auto get_slice_raw(const(char*) key, size_t keylen, const(ReadOptions) opt)
     {
         if(!isOpen) throw new LeveldbException(`Not connected to a valid db`);
 
@@ -258,7 +324,7 @@ public:
         scope(failure) if(errptr) leveldb_free(errptr);
 
         size_t vallen;
-        void* val = leveldb_get(_db, opt.ptr, key.ptr!(const(char*)), key.length, &vallen, &errptr);
+        void* val = leveldb_get(_db, opt.ptr, key, keylen, &vallen, &errptr);
         scope(failure) if(val) leveldb_free(val);
         if(errptr) throw new LeveldbException(errptr);
         return Slice(val, vallen, true);
@@ -498,9 +564,12 @@ public:
 
         /// Seek to given slice.
         @property
-        void seek(Slice key)
+        void seek(T)(T key)
         {
-            leveldb_iter_seek(_iter, key.ptr!(const(char*)), key.length);
+            static if(__traits(isSame, T, Slice))
+                leveldb_iter_seek(_iter, key.ptr!(const(char*)), key.length);
+            else
+                leveldb_iter_seek(_iter, cast(const(char*))pointer(key), size(key));
         }
 
         /// Move to next item
@@ -636,6 +705,27 @@ unittest
     string ret;
     assert(db.get(Slice("Hello"), ret));
     assert(ret == "World");
+    db.del("Hello");
+    assert(!db.get(Slice("Hello"), ret));
+    assert(ret != "World");
+    destroy(db); // force destructor to be called
+    db.destroyDB(opt, tempPath ~ `s1`);
+}
+
+unittest
+{
+    auto opt = new Options;
+    opt.create_if_missing = true;
+    auto db = new DB(opt, tempPath ~ `s1`);
+    assert(db.isOpen);
+    db.put("Hello", "World");
+    db.close;
+    assert(!db.isOpen);
+    db.open(opt, tempPath ~ `s1`);
+    assert(db.isOpen);
+    string ret;
+    assert(db.get(Slice("Hello"), ret));
+    assert(ret == "World");
     db.del(Slice("Hello"));
     assert(!db.get(Slice("Hello"), ret));
     assert(ret != "World");
@@ -653,7 +743,7 @@ unittest
     db.put(Slice("PI"), Slice(pi));
     assert(db.get(Slice("PI"), pi));
     assert(pi == PI);
-    assert(!db.get_slice(Slice("PI2")).ok);
+    assert(!db.get_slice("PI2").ok);
     auto pi2 = db.get_slice(Slice("PI"));
     assert(pi2.ok);
     assert(pi2.length == pi.sizeof);
@@ -668,9 +758,9 @@ unittest
     auto db = new DB(opt, tempPath ~ `s4`);
     db.put(Slice("SCORE"), Slice.Ref(234L));
     long pi;
-    assert(db.get(Slice("SCORE"), pi));
+    assert(db.get("SCORE", pi));
     assert(pi == 234);
-    assert(!db.get_slice(Slice("SCORE2")).ok);
+    assert(!db.get_slice("SCORE2").ok);
     auto pi2 = db.get_slice(Slice("SCORE"));
     assert(pi2.ok);
     assert(pi2.length == pi.sizeof);
@@ -698,12 +788,12 @@ unittest
     assert(o1.as!Point.x == p.x);
     assert(o1.as!Point.y == p.y);
     assert(db.get(Slice(uuid.data), p2));
-    auto o2 = db.get_slice(Slice(uuid.data));
-    db.del(Slice(uuid.data));
+    auto o2 = db.get_slice(uuid.data);
+    db.del(uuid.data);
     GC.collect();
     assert(p2.x == p.x);
     assert(p2.y == p.y);
-    assert(!db.get(Slice(uuid.data), p2));
+    assert(!db.get(uuid.data, p2));
 }
 
 unittest
@@ -714,26 +804,53 @@ unittest
 
     db.put(Slice("Joe"), Slice.Ref(25));
     db.put(Slice("Sally"), Slice.Ref(905));
-    assert(db.get_slice(Slice("Joe")).as!int == 25);
+    assert(db.get_slice("Joe").as!int == 25);
     assert(db.get_slice(Slice("Sally")).as!int == 905);
 
     auto joe = db.get_slice(Slice("Joe")).as!int - 10;
     auto sally = db.get_slice(Slice("Sally")).as!int + 10;
 
     auto wb = new WriteBatch();
-    wb.put(Slice("Joe"), Slice(joe));
-    wb.put(Slice("Sally"), Slice(sally));
+    wb.put(Slice("Joe"), joe);
+    wb.put("Sally", Slice(sally));
     assert(db.get_slice(Slice("Joe")).as!int == 25);
-    assert(db.get_slice(Slice("Sally")).as!int == 905);
+    assert(db.get_slice("Sally").as!int == 905);
     wb.clear;
     db.write(wb);
     assert(db.get_slice(Slice("Joe")).as!int == 25);
-    assert(db.get_slice(Slice("Sally")).as!int == 905);
-    wb.put(Slice("Joe"), Slice(joe));
+    assert(db.get_slice("Sally").as!int == 905);
+    wb.put("Joe", joe);
     wb.put(Slice("Sally"), Slice(sally));
     db.write(wb);
-    assert(db.get_slice(Slice("Joe")).as!int == joe);
-    assert(db.get_slice(Slice("Sally")).as!int == sally);
+    assert(db.get_slice("Joe").as!int == joe);
+    assert(db.get_slice("Sally").as!int == sally);
+}
+
+unittest
+{
+    auto opt = new Options;
+    opt.create_if_missing = true;
+    auto db = new DB(opt, tempPath ~ `wb2`);
+
+    db.put("A", 1);
+    db.put("B", 1);
+    assert(db.get_slice("A").ok);
+    assert(db.get_slice("B").ok);
+    auto wb = new WriteBatch();
+    wb.del("A");
+    assert(db.get_slice("A").ok);
+    assert(db.get_slice("B").ok);
+    db.write(wb);
+    assert(!db.get_slice("A").ok);
+    assert(db.get_slice("B").ok);
+    db.put("A", 1);
+    wb.clear;
+    wb.del(Slice("B"));
+    assert(db.get_slice("A").ok);
+    assert(db.get_slice("B").ok);
+    db.write(wb);
+    assert(db.get_slice("A").ok);
+    assert(!db.get_slice("B").ok);
 }
 
 unittest
@@ -744,18 +861,18 @@ unittest
     auto db = new DB(opt, tempPath ~ `ss1`);
     auto snap = db.snapshot;
     assert(snap);
-    db.put(Slice("Future"), Slice("Stuff"));
+    db.put(Slice("Future"), "Stuff");
     auto ro = new ReadOptions;
     ro.snapshot(snap);
     string str;
     assert(db.get(Slice("Future"), str));
     assert(str == "Stuff");
-    assert(!db.get(Slice("Future"), str, ro));
+    assert(!db.get("Future", str, ro));
     assert(str == "");
-    assert(db.get(Slice("Future"), str));
+    assert(db.get("Future", str));
     snap = db.snapshot;
     ro.snapshot(snap);
-    assert(db.get(Slice("Future"), str, ro));
+    assert(db.get("Future", str, ro));
 }
 
 unittest
@@ -778,9 +895,16 @@ unittest
         assert(value.as!string == "World");
     }
 
-    db.put(Slice.Ref(1), Slice.Ref(1));
+    db.put(1, Slice.Ref(1));
     it = db.iterator;
     for(it.seek(Slice.Ref(1)); it.valid; it.next)
+    {
+        assert(it.key.ok);
+        assert(it.value.ok);
+    }
+
+    it = db.iterator;
+    for(it.seek(1); it.valid; it.next)
     {
         assert(it.key.ok);
         assert(it.value.ok);
@@ -796,7 +920,7 @@ unittest
     assert(db.isOpen);
     foreach(int i; 1..10)
     {
-        db.put(Slice(i), Slice.Ref(i*2));
+        db.put(i, i*2);
     }
     auto it = db.iterator;
     
@@ -816,7 +940,7 @@ unittest
     opt.create_if_missing = true;
     DB.destroyDB(opt, tempPath ~ `it3/`);
     auto db = new DB(opt, tempPath ~ `it3/`);
-    db.put(Slice("Hello"), Slice("World"));
+    db.put("Hello", "World");
 
     foreach(Slice key, Slice value; db)
     {
@@ -839,7 +963,7 @@ unittest
     assert(db.isOpen);
     foreach(int i; 1..10)
     {
-        db.put(Slice(i), Slice.Ref(i*2));
+        db.put(Slice(i), i*2);
     }
     foreach(Slice key, Slice value; db)
     {

@@ -40,30 +40,6 @@ package:
         len = l;
     }
 
-    /// Find the byte size of a valid Slice type
-    size_t size(P)(ref P p)
-    {
-        static if((isStaticArray!P && !isBanned!(ForeachType!P)) || isBasicType!P || isPODStruct!P) 
-            return P.sizeof;
-        else static if(isPointer!P) 
-            return size(*p);
-        else static if(isDynamicArray!P && !isBanned!(ForeachType!P))
-            return (p.length ? size(p[0]) * p.length : 0 );
-        else assert(false, "Not a valid type for leveldb slice: ref " ~ typeof(p).stringof);
-    }
-
-    /// Find the pointer of a valid Slice type
-    void* pointer(P)(ref P p)
-    {
-        static if((isArray!P && !isBanned!(ForeachType!P)))
-            return cast(void*)p.ptr;
-        else static if(isBasicType!P || isPODStruct!P)
-            return cast(void*)(&p);
-        else static if(isPointer!P) 
-            return pointer(*p);
-        else assert(false, "Not a valid type for leveldb slice: ref " ~ typeof(p).stringof);
-    }
-
 public:
     /// Takes reference
     this(P)(ref P p)
@@ -150,6 +126,32 @@ public:
         align(1) static struct Ref{ T t; }
         return Slice(new Ref(t), T.sizeof);
     }
+}
+
+package:
+
+/// Find the byte size of a valid Slice type
+size_t size(P)(ref P p)
+{
+    static if((isStaticArray!P && !isBanned!(ForeachType!P)) || isBasicType!P || isPODStruct!P) 
+        return P.sizeof;
+    else static if(isPointer!P) 
+        return size(*p);
+    else static if(isDynamicArray!P && !isBanned!(ForeachType!P))
+        return (p.length ? size(p[0]) * p.length : 0 );
+    else assert(false, "Not a valid type for leveldb slice: ref " ~ typeof(p).stringof);
+}
+
+/// Find the pointer of a valid Slice type
+void* pointer(P)(ref P p)
+{
+    static if((isArray!P && !isBanned!(ForeachType!P)))
+        return cast(void*)p.ptr;
+    else static if(isBasicType!P || isPODStruct!P)
+        return cast(void*)(&p);
+    else static if(isPointer!P) 
+        return pointer(*p);
+    else assert(false, "Not a valid type for leveldb slice: ref " ~ typeof(p).stringof);
 }
 
 template isBanned(T)
