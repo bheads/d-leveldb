@@ -1,7 +1,7 @@
 {
     "name": "d-leveldb",
     "description": "D LevelDB interface",
-    "homepage": "http://example.org",
+    "homepage": "https://github.com/bheads/d-leveldb",
     "copyright": "Copyright © 2013, Byron Heads",
     "authors": [
         "Byron Heads"
