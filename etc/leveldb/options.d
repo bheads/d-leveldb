@@ -25,7 +25,7 @@ private import deimos.leveldb.leveldb;
 public __gshared const(ReadOptions) DefaultReadOptions;
 public __gshared const(WriteOptions) DefaultWriteOptions;
 
-static this()
+shared static this()
 {
     DefaultReadOptions = new ReadOptions;
     DefaultWriteOptions = new WriteOptions;
