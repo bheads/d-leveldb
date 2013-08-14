@@ -548,6 +548,12 @@ public:
             return cast(bool)leveldb_iter_valid(_iter);
         }
 
+	@property
+	bool empty() inout
+	{
+		return !valid;
+	}
+
         /// Seek to front of data
         @property 
         void seek_to_first()
@@ -579,6 +585,8 @@ public:
             leveldb_iter_next(_iter);
         }
 
+	alias next popFront;
+
         /// Move to previous item
         @property
         void prev()
@@ -586,7 +594,7 @@ public:
             leveldb_iter_prev(_iter);
         }
 
-        /// Return thr current key
+        /// Return the current key
         @property
         Slice key()
         {
@@ -599,7 +607,7 @@ public:
 
         /// Return the current value
         @property
-        value()
+        auto value()
         {
             debug if(!valid) throw new LeveldbException("Accessing invalid iterator");
             size_t vallen;
@@ -607,6 +615,13 @@ public:
             scope(failure) if(val) leveldb_free(val);
             return Slice(val, vallen, false);
         }
+
+	/// return the front of the iterator
+	@property
+	auto front()
+	{
+		return [key, value];
+	}
 
         /// Gets the current error status of the iterator
         @property
