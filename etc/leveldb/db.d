@@ -42,7 +42,7 @@ version(unittest)
     const __gshared const(string) tempPath;
     static this()
     {
-        tempPath = tempDir() ~ `unittest_d_leveldb/`;
+        tempPath = tempDir() ~ `/unittest_d_leveldb/`;
         try
         {
             writeln("Temp Path: ", tempPath);
@@ -148,32 +148,14 @@ public:
      ---
      * Throws: LeveldbException
      */
-    void put(K, V)(K key, V val, const(WriteOptions) opt = DefaultWriteOptions)
-    {
-        static if(__traits(isSame, K, Slice) && __traits(isSame, V, Slice))
-            put_raw(key.ptr!(const(char*)), key.length, val.ptr!(const(char*)), val.length, opt);
-        else static if(!__traits(isSame, K, Slice) && __traits(isSame, V, Slice))
-            put_raw(cast(const(char*))pointer(key), size(key), val.ptr!(const(char*)), val.length, opt);
-        else static if(__traits(isSame, K, Slice) && !__traits(isSame, V, Slice))
-            put_raw(key.ptr!(const(char*)), key.length, cast(const(char*))pointer(val), size(val), opt);
-        else
-            put_raw(cast(const(char*))pointer(key), size(key), cast(const(char*))pointer(val), size(val), opt);
-    }
-
-    /**
-     * Inserts/Updates a given value at a given key.  This is the real call to leveldb
-     *
-     * Throws: LeveldbException
-     */
-    private
-    void put_raw(const(char*) key, size_t keylen, const(char*) val, size_t vallen, const(WriteOptions) opt)
+    void put(K, V)(in K key, in V val, const(WriteOptions) opt = DefaultWriteOptions)
     {
         if(!isOpen) throw new LeveldbException(`Not connected to a valid db`);
 
         char* errptr = null;
         scope(failure) if(errptr) leveldb_free(errptr);
 
-        leveldb_put(_db, opt.ptr, key, keylen, val, vallen, &errptr);
+        leveldb_put(_db, opt.ptr, key.pointer, key.size, val.pointer, val.size, &errptr);
         if(errptr) throw new LeveldbException(errptr);
     }
 
@@ -190,28 +172,14 @@ public:
      ---
      * Throws: LeveldbException
      */
-    void del(T)(T key, const(WriteOptions) opt = DefaultWriteOptions)
-    {
-        static if(__traits(isSame, T, Slice))
-            del_raw(key.ptr!(const(char*)), key.length, opt);
-        else
-            del_raw(cast(const(char*))pointer(key), size(key), opt);
-    }
-
-    /**
-     * Deletes a key from the db.  Calles leveldb_delete
-     *
-     * Throws: LeveldbException
-     */
-    private
-    void del_raw(const(char*) key, size_t keylen, const(WriteOptions) opt)
+    void del(T)(in T key, const(WriteOptions) opt = DefaultWriteOptions)
     {
         if(!isOpen) throw new LeveldbException(`Not connected to a valid db`);
         
         char* errptr = null;
         scope(failure) if(errptr) leveldb_free(errptr);
 
-        leveldb_delete(_db, opt.ptr, key, keylen, &errptr);
+        leveldb_delete(_db, opt.ptr, key.pointer, key.size, &errptr);
         if(errptr) throw new LeveldbException(errptr);
     }
 
@@ -234,25 +202,8 @@ public:
      * Throws: LeveldbException
      * Returns: true if the key was found in the DB
      */
-    bool get(T, V)(T key, out V value, const(ReadOptions) opt = DefaultReadOptions)
-    {
-        static if(__traits(isSame, T, Slice))
-            return get_raw(key.ptr!(const(char*)), key.length, value, opt);
-        else
-            return get_raw(cast(const(char*))pointer(key), size(key), value, opt);
-    }
-
-    /**
-     * Gets an entry from the DB
-     *
-     * Calls leveldb_get
-     * V must be convertable from char array.
-     *
-     * Throws: LeveldbException
-     * Returns: true if the key was found in the DB
-     */
-    bool get_raw(V)(const(char*) key, size_t keylen, out V value, const(ReadOptions) opt)
-        if(!is(V == const(ReadOptions)))
+    bool get(T, V)(in T key, out V value, const(ReadOptions) opt = DefaultReadOptions)
+        if(!is(V == interface))
     {
         if(!isOpen) throw new LeveldbException(`Not connected to a valid db`);
 
@@ -260,24 +211,29 @@ public:
         scope(failure) if(errptr) leveldb_free(errptr);
 
         size_t vallen;
-        auto val = leveldb_get(_db, opt.ptr, key, keylen, &vallen, &errptr);
-        scope(exit) if(val) leveldb_free(val);
+        auto valptr = leveldb_get(_db, opt.ptr, key.pointer, key.size, &vallen, &errptr);
+        scope(exit) if(valptr !is null) leveldb_free(valptr);
         if(errptr) throw new LeveldbException(errptr);
-        if(val !is null)
+        if(valptr is null) return false;
+
+        static if(isSomeString!V || isArray!V)
+	{
+            value = cast(V)(cast(char[])(valptr)[0..vallen]).dup;
+	}
+        else static if(is(V == class))
         {
-            static if(is(V == interface)) assert(0);
-            static if(isArray!V) value = cast(V)(val[0..vallen]);
-            else static if(__traits(compiles, value.dup)) value = *(cast(V*)val).dup;
-            else static if(__traits(compiles, value = new V(*(cast(const(V*))val)))) value = new V(*(cast(const(V*))val));
-            else
-            {
-                static if(is(V == class))
-                if(value is null) value = *cast(V*)GC.malloc(V.sizeof);
-                memcpy(cast(void*)&value, cast(const(void*))val, V.sizeof);
-            }
-            return true;
+            if(typeid(V).sizeof > vallen)
+                throw new LeveldbException("Assignment size is larger then data size");
+            value = *(cast(V*)valptr).dup;
         }
-        return false;
+        else
+        {
+            if(V.sizeof > vallen)
+                throw new LeveldbException("Assignment size is larger then slice data size");
+            value = *(cast(V*)valptr);
+        }
+
+        return true;
     }
 
     /**
@@ -299,10 +255,7 @@ public:
      */
     auto get_slice(T)(T key, const(ReadOptions) opt = DefaultReadOptions)
     {
-        static if(__traits(isSame, T, Slice))
-            return get_slice_raw(key.ptr!(const(char*)), key.length, opt);
-        else
-            return get_slice_raw(cast(const(char*))pointer(key), size(key), opt);
+        return get_slice_raw(key.pointer, key.size, opt);
     }
 
     /**
@@ -572,10 +525,7 @@ public:
         @property
         void seek(T)(T key)
         {
-            static if(__traits(isSame, T, Slice))
-                leveldb_iter_seek(_iter, key.ptr!(const(char*)), key.length);
-            else
-                leveldb_iter_seek(_iter, cast(const(char*))pointer(key), size(key));
+            leveldb_iter_seek(_iter, key.pointer, key.size);
         }
 
         /// Move to next item
@@ -706,18 +656,46 @@ public:
 
 
 // Basic open, write string close, open get string, del string, get it
+
 unittest
 {
     auto opt = new Options;
     opt.create_if_missing = true;
     auto db = new DB(opt, tempPath ~ `s1`);
     assert(db.isOpen);
-    db.put(Slice("Hello"), Slice("World"));
+    int i = 1234;
+    db.put("simple", i);
+    assert(i == 1234);
+    i = 0;
+    db.get("simple", i);
+    double x = 3.145;
+    assert(i == 1234);
+    db.put("simple", x);
+    x = 0;
+    db.get("simple", x);
+    assert(x == 3.145, x.to!string);
+    db.destroy;
+}
+
+unittest
+{
+    auto opt = new Options;
+    string ret;
+    opt.create_if_missing = true;
+    auto db = new DB(opt, tempPath ~ `s1`);
+    assert(db.isOpen);
+    assert(Slice("World").size == "World".size);
+    assert(Slice("World").size == 5);
+    ret = "World";
+    db.put(Slice("Hello"), ret);
+    ret = "";
+    assert(db.get_slice(Slice("Hello")).as!string == "World");
+    assert(db.get(Slice("Hello"), ret));
+    assert(ret == "World");
     db.close;
     assert(!db.isOpen);
     db.open(opt, tempPath ~ `s1`);
     assert(db.isOpen);
-    string ret;
     assert(db.get(Slice("Hello"), ret));
     assert(ret == "World");
     db.del("Hello");

@@ -16,7 +16,7 @@ module etc.leveldb.slice;
 
 private import etc.leveldb.exceptions;
 private import std.traits : isArray, isStaticArray, isDynamicArray,
-                            isPointer, isBasicType, ForeachType;
+                            isPointer, isBasicType, ForeachType, isSomeString;
 private import deimos.leveldb.leveldb : leveldb_free;
 
 /**
@@ -44,13 +44,13 @@ public:
     /// Takes reference
     this(P)(ref P p)
     {
-        this(pointer(p), size(p));
+        this(p.pointer, p.size);
     }
 
     this(P)(in P p)
         if(!__traits(isRef, p))
     {
-        this(pointer(p), size(p));
+        this(p.pointer, p.size);
     }
 
     /// Takes reference
@@ -76,6 +76,8 @@ public:
         return cast(inout(T))_ptr;
     }
 
+    alias ptr!(const(char*)) pointer;
+
     /// Get slice as a data type
     @property
     inout(T) as(T)() inout
@@ -97,12 +99,15 @@ public:
         }
     }
 
+    alias as to;
+
     /// length or size of slice
     @property
     size_t length() inout
     {
         return len;
     }
+    alias length size;
 
     /// Test is slice is valid
     @property
@@ -131,24 +136,33 @@ public:
 package:
 
 /// Find the byte size of a valid Slice type
-size_t size(P)(ref P p)
+size_t size(P)(in P p)
+    if(isSomeString!P || ((isStaticArray!P || isDynamicArray!P) && !isBanned!(ForeachType!P)))
 {
-    static if((isStaticArray!P && !isBanned!(ForeachType!P)) || isBasicType!P || isPODStruct!P) 
-        return P.sizeof;
-    else static if(isPointer!P) 
-        return size(*p);
-    else static if(isDynamicArray!P && !isBanned!(ForeachType!P))
-        return (p.length ? size(p[0]) * p.length : 0 );
-    else assert(false, "Not a valid type for leveldb slice: ref " ~ typeof(p).stringof);
+    return p.length ? p[0].sizeof * p.length : 0;
 }
 
+/// Find the byte size of a valid Slice type
+size_t size(P)(in P p)
+    if(isBasicType!P || isPODStruct!P) 
+{
+    return P.sizeof;
+}
+
+/// Find the byte size of a valid Slice type
+size_t size(P)(in P p)
+    if(isPointer!P) 
+{
+    return size(*p);
+}
+    
 /// Find the pointer of a valid Slice type
-void* pointer(P)(ref P p)
+const(char)* pointer(P)(ref P p)
 {
     static if((isArray!P && !isBanned!(ForeachType!P)))
-        return cast(void*)p.ptr;
+        return cast(const(char*))p.ptr;
     else static if(isBasicType!P || isPODStruct!P)
-        return cast(void*)(&p);
+        return cast(const(char*))(&p);
     else static if(isPointer!P) 
         return pointer(*p);
     else assert(false, "Not a valid type for leveldb slice: ref " ~ typeof(p).stringof);
@@ -170,6 +184,17 @@ template isPODStruct(T)
         enum isPODStruct = false;
 }
 
+unittest
+{
+    assert(size("1234567890") == 10);
+    assert(size("1234") == 4);
+    int i = 123567;
+    assert(size(i) == int.sizeof);
+    long l = 123567;
+    assert(size(l) == long.sizeof);
+    double d = 123567;
+    assert(size(d) == double.sizeof);
+}
 
 unittest
 {

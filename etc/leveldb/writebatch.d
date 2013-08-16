@@ -55,14 +55,7 @@ public:
 
     void put(K, V)(K key, V val)
     {
-        static if(__traits(isSame, K, Slice) && __traits(isSame, V, Slice))
-            put_raw(key.ptr!(const(char*)), key.length, val.ptr!(const(char*)), val.length);
-        else static if(!__traits(isSame, K, Slice) && __traits(isSame, V, Slice))
-            put_raw(cast(const(char*))pointer(key), size(key), val.ptr!(const(char*)), val.length);
-        else static if(__traits(isSame, K, Slice) && !__traits(isSame, V, Slice))
-            put_raw(key.ptr!(const(char*)), key.length, cast(const(char*))pointer(val), size(val));
-        else
-            put_raw(cast(const(char*))pointer(key), size(key), cast(const(char*))pointer(val), size(val));
+        put_raw(key.pointer, key.size, val.pointer, val.size);
     }
 
     private
@@ -73,10 +66,7 @@ public:
 
     void del(T)(T key)
     {
-        static if(__traits(isSame, T, Slice))
-            leveldb_writebatch_delete(_ptr, key.ptr!(const(char*)), key.length);
-        else
-            leveldb_writebatch_delete(_ptr, cast(const(char*))pointer(key), size(key));
+        leveldb_writebatch_delete(_ptr, key.pointer, key.size);
     }
 
     void iterate(Visitor visitor)
