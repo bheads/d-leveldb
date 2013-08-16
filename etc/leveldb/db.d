@@ -184,6 +184,50 @@ public:
     }
 
     /**
+     * finds an entry in the db or returns the default value
+     * Example
+     ---
+     auto opt = new Options;
+     opt.create_if_missing = true;
+     auto db = new DB(opt, "/my/db/");
+     db.put("user_1245_name", "John Smith);
+     assert(db.find("user_1245_name", "") == "John Smith");
+     ---
+     * Throws: LeveldbException
+     */
+    V find(K, V)(in K key, V def, const(ReadOptions) opt = DefaultReadOptions)
+        if(!is(V == interface))
+    {
+        if(!isOpen) throw new LeveldbException(`Not connected to a valid db`);
+
+        char* errptr = null;
+        scope(failure) if(errptr) leveldb_free(errptr);
+
+        size_t vallen;
+        auto valptr = leveldb_get(_db, opt.ptr, key.pointer, key.size, &vallen, &errptr);
+        scope(exit) if(valptr !is null) leveldb_free(valptr);
+        if(errptr) throw new LeveldbException(errptr);
+        if(valptr is null) return def;
+
+        static if(isSomeString!V || isArray!V)
+	{
+            return cast(V)(cast(char[])(valptr)[0..vallen]).dup;
+	}
+        else static if(is(V == class))
+        {
+            if(typeid(V).sizeof > vallen)
+                throw new LeveldbException("Assignment size is larger then data size");
+            return *(cast(V*)valptr).dup;
+        }
+        else
+        {
+            if(V.sizeof > vallen)
+                throw new LeveldbException("Assignment size is larger then slice data size");
+            return *(cast(V*)valptr);
+        }
+    }
+
+    /**
      * Gets an entry from the DB
      *
      * Only accepts an array for the key.
@@ -255,29 +299,13 @@ public:
      */
     auto get_slice(T)(T key, const(ReadOptions) opt = DefaultReadOptions)
     {
-        return get_slice_raw(key.pointer, key.size, opt);
-    }
-
-    /**
-     * Gets an entry from the DB as a Slice.
-     *
-     * Calles leveldb_get
-     *
-     * Example:
-     * Throws: LeveldbException
-     * Returns: A Slice struct, this holds the returned pointer and size
-     * Slice will safely clean up the result
-     */
-    private
-    auto get_slice_raw(const(char*) key, size_t keylen, const(ReadOptions) opt)
-    {
         if(!isOpen) throw new LeveldbException(`Not connected to a valid db`);
 
         char* errptr = null;
         scope(failure) if(errptr) leveldb_free(errptr);
 
         size_t vallen;
-        void* val = leveldb_get(_db, opt.ptr, key, keylen, &vallen, &errptr);
+        void* val = leveldb_get(_db, opt.ptr, key.pointer, key.size, &vallen, &errptr);
         scope(failure) if(val) leveldb_free(val);
         if(errptr) throw new LeveldbException(errptr);
         return Slice(val, vallen, true);
@@ -966,5 +994,20 @@ unittest
     {
         assert(value.as!int == key.as!int * 2);
     }
+}
+
+
+unittest
+{
+    auto opt = new Options;
+    opt.create_if_missing = true;
+    DB.destroyDB(opt, tempPath ~ `find`);
+    auto db = new DB(opt, tempPath ~ `find/`);
+    assert(db.isOpen);
+    db.put("i1", "blah1.png");
+    db.put("i2", "blah2.png");
+    assert(db.find("i1", "null.png") == "blah1.png");
+    assert(db.find("i2", "null.png") == "blah2.png");
+    assert(db.find("i3", "null.png") == "null.png");
 }
 
