@@ -155,7 +155,7 @@ public:
         char* errptr = null;
         scope(failure) if(errptr) leveldb_free(errptr);
 
-        leveldb_put(_db, opt.ptr, key.pointer, key.size, val.pointer, val.size, &errptr);
+        leveldb_put(_db, opt.ptr, key._lib_obj_ptr__, key._lib_obj_size__, val._lib_obj_ptr__, val._lib_obj_size__, &errptr);
         if(errptr) throw new LeveldbException(errptr);
     }
 
@@ -179,7 +179,7 @@ public:
         char* errptr = null;
         scope(failure) if(errptr) leveldb_free(errptr);
 
-        leveldb_delete(_db, opt.ptr, key.pointer, key.size, &errptr);
+        leveldb_delete(_db, opt.ptr, key._lib_obj_ptr__, key._lib_obj_size__, &errptr);
         if(errptr) throw new LeveldbException(errptr);
     }
 
@@ -204,7 +204,7 @@ public:
         scope(failure) if(errptr) leveldb_free(errptr);
 
         size_t vallen;
-        auto valptr = leveldb_get(_db, opt.ptr, key.pointer, key.size, &vallen, &errptr);
+        auto valptr = leveldb_get(_db, opt.ptr, key._lib_obj_ptr__, key._lib_obj_size__, &vallen, &errptr);
         scope(exit) if(valptr !is null) leveldb_free(valptr);
         if(errptr) throw new LeveldbException(errptr);
         if(valptr is null) return def;
@@ -255,7 +255,7 @@ public:
         scope(failure) if(errptr) leveldb_free(errptr);
 
         size_t vallen;
-        auto valptr = leveldb_get(_db, opt.ptr, key.pointer, key.size, &vallen, &errptr);
+        auto valptr = leveldb_get(_db, opt.ptr, key._lib_obj_ptr__, key._lib_obj_size__, &vallen, &errptr);
         scope(exit) if(valptr !is null) leveldb_free(valptr);
         if(errptr) throw new LeveldbException(errptr);
         if(valptr is null) return false;
@@ -305,7 +305,7 @@ public:
         scope(failure) if(errptr) leveldb_free(errptr);
 
         size_t vallen;
-        void* val = leveldb_get(_db, opt.ptr, key.pointer, key.size, &vallen, &errptr);
+        void* val = leveldb_get(_db, opt.ptr, key._lib_obj_ptr__, key._lib_obj_size__, &vallen, &errptr);
         scope(failure) if(val) leveldb_free(val);
         if(errptr) throw new LeveldbException(errptr);
         return Slice(val, vallen, true);
@@ -553,7 +553,7 @@ public:
         @property
         void seek(T)(T key)
         {
-            leveldb_iter_seek(_iter, key.pointer, key.size);
+            leveldb_iter_seek(_iter, key._lib_obj_ptr__, key._lib_obj_size__);
         }
 
         /// Move to next item
@@ -712,8 +712,8 @@ unittest
     opt.create_if_missing = true;
     auto db = new DB(opt, tempPath ~ `s1`);
     assert(db.isOpen);
-    assert(Slice("World").size == "World".size);
-    assert(Slice("World").size == 5);
+    assert(Slice("World")._lib_obj_size__ == "World"._lib_obj_size__);
+    assert(Slice("World")._lib_obj_size__ == 5);
     ret = "World";
     db.put(Slice("Hello"), ret);
     ret = "";

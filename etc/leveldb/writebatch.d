@@ -55,7 +55,7 @@ public:
 
     void put(K, V)(K key, V val)
     {
-        put_raw(key.pointer, key.size, val.pointer, val.size);
+        put_raw(key._lib_obj_ptr__, key._lib_obj_size__, val._lib_obj_ptr__, val._lib_obj_size__);
     }
 
     private
@@ -66,7 +66,7 @@ public:
 
     void del(T)(T key)
     {
-        leveldb_writebatch_delete(_ptr, key.pointer, key.size);
+        leveldb_writebatch_delete(_ptr, key._lib_obj_ptr__, key._lib_obj_size__);
     }
 
     void iterate(Visitor visitor)
