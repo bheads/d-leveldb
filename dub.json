@@ -7,7 +7,9 @@
         "Byron Heads"
     ],
     "dependencies": {
-        "leveldb" : ">=1.16.1"
+        "leveldb" : ">=1.16.0"
     },
+    "license": "BSL-1.0",
+    "description": "A Leveldb implementation for D.",
     "targetType" : "library",
 }
