@@ -13,10 +13,10 @@
  *    (See accompanying file LICENSE_1_0.txt or copy at
  *          http://www.boost.org/LICENSE_1_0.txt)
  */
-module etc.leveldb.writebatch;
+module leveldb.writebatch;
 
-private import etc.leveldb.exceptions,
-                etc.leveldb.slice;
+private import  leveldb.exceptions,
+                leveldb.slice;
 private import deimos.leveldb.leveldb;
 
 class WriteBatch

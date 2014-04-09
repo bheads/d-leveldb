@@ -4,5 +4,4 @@
 *.dll
 *.dylib
 .dub
-d-leveldb
-d-leveldb.exe
+*.exe

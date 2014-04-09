@@ -24,7 +24,7 @@
  *    (See accompanying file LICENSE_1_0.txt or copy at
  *          http://www.boost.org/LICENSE_1_0.txt)
  */
-module etc.leveldb.db;
+module leveldb.db;
 
 private import std.string : toStringz;
 private import std.conv : to;
@@ -60,10 +60,10 @@ version(unittest)
 }
 
 private import
-    etc.leveldb.exceptions,
-    etc.leveldb.slice,
-    etc.leveldb.writebatch,
-    etc.leveldb.options;
+    leveldb.exceptions,
+    leveldb.slice,
+    leveldb.writebatch,
+    leveldb.options;
 
 private import deimos.leveldb.leveldb;
 

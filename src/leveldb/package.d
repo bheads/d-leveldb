@@ -1,10 +1,10 @@
-module etc.leveldb.leveldb;
+module leveldb;
 
 public import
-    etc.leveldb.db,
-    etc.leveldb.exceptions,
-    etc.leveldb.slice,
-    etc.leveldb.options;
+    leveldb.db,
+    leveldb.exceptions,
+    leveldb.slice,
+    leveldb.options;
 
 private import deimos.leveldb.leveldb;
 

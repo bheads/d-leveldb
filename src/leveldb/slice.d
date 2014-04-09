@@ -12,9 +12,9 @@
  *    (See accompanying file LICENSE_1_0.txt or copy at
  *          http://www.boost.org/LICENSE_1_0.txt)
  */
-module etc.leveldb.slice;
+module leveldb.slice;
 
-private import etc.leveldb.exceptions;
+private import leveldb.exceptions;
 private import std.traits : isArray, isStaticArray, isDynamicArray,
                             isPointer, isBasicType, ForeachType, isSomeString;
 private import deimos.leveldb.leveldb : leveldb_free;

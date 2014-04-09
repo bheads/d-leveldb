@@ -12,12 +12,12 @@
  *    (See accompanying file LICENSE_1_0.txt or copy at
  *          http://www.boost.org/LICENSE_1_0.txt)
  */
-module etc.leveldb.options;
+module leveldb.options;
 
 private import std.algorithm : cmp;
 private import std.string : toStringz;
 
-private import etc.leveldb.exceptions;
+private import leveldb.exceptions;
 
 private import deimos.leveldb.leveldb;
 

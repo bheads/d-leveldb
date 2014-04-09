@@ -28,7 +28,7 @@ void main()
 
 ```
 
-##Leveldb Version: 1.9.0
+##Leveldb Version: 1.16.0
 
 ### Installation
 Get this with [dub](http://registry.vibed.org/packages/d-leveldb).

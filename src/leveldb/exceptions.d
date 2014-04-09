@@ -12,7 +12,7 @@
  *    (See accompanying file LICENSE_1_0.txt or copy at
  *          http://www.boost.org/LICENSE_1_0.txt)
  */
-module etc.leveldb.exceptions;
+module leveldb.exceptions;
 
 private import std.conv : to;
 
