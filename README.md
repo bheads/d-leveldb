@@ -10,10 +10,11 @@ void main()
     auto opt = new Options;
     opt.create_if_missing = true;
 
-    auto db = new DB(opt, "path/to/db");
+    auto db = new DB("path/to/db", opt);
     db.put("Hello", "World");
 
-    assert(db.get_slice("Hello").as!string == "World");
+    assert(db.find("Hello", "") == "World");
+    assert(db.find("Hello2", "") == "");
 
     db.put("PI", 3.14);
 
@@ -38,7 +39,7 @@ To use this package, put the following dependency into your project's package.js
 {
         ...
         "dependencies": {
-                "d-leveldb": "~master"
+                "d-leveldb": "~develop"
         }
 }
 ```

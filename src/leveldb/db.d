@@ -191,6 +191,42 @@ public:
         }
     }
 
+    final
+    bool get(K, V)(in K key, ref V val, const(ReadOptions) opt = DefaultReadOptions) {
+        import std.conv : to;
+
+        dbEnforce(isOpen, "Not connected to a db");
+        
+        char* errptr = null;
+        scope(exit) if(errptr !is null) leveldb_free(errptr);
+
+        size_t vallen; // size of the return slice
+
+        static if(isPrimitive!K) {
+            auto valret = leveldb_get(_db, opt.ptr, key.ptr, key.size, &vallen, &errptr);
+        } else {
+            const(ubyte)[] keyBuf = pack!K(key);
+            auto valret = leveldb_get(_db, opt.ptr, keyBuf.ptr, keyBuf.length, &vallen, &errptr);
+        }
+        scope(exit) if(valret !is null) leveldb_free(valret); // make sure we clean this up
+
+        dbEnforce(!errptr);
+
+        // Not in db
+        if (valret is null) {
+            return false;
+        }
+        
+        static if(isSomeString!V) {
+            val = (cast(V)valret[0..vallen]).dup;
+        } else static if(isPrimitive!V) {
+            val = *(cast(V*)valret);
+        } else {
+            val = unpack!V(cast(ubyte[])valret);
+        }
+        return true;
+    }
+
 
     /+
 
@@ -599,5 +635,27 @@ unittest {
     assert(!db.close.isOpen);
     db = new DB!(null, null)(buildNormalizedPath(tempDir, "d-leveldb_unittest.db"), opt);
     assert(db.find(123, "null") == "null");
+    db.close;
+}
+
+// Putting in basic values and getting them back
+unittest {
+    import std.file, std.path;
+    auto opt = new Options;
+    opt.create_if_missing = true;
+    auto db = new DB!(null, null)(buildNormalizedPath(tempDir, "d-leveldb_unittest.db"), opt);
+    assert(db.isOpen);
+    db.put("testing", 123).put(123, "blah");
+
+    int x;
+    assert(db.get("testing", x));
+    assert(x == 123);
+    assert(!db.get("Testing", x));
+    assert(x == 123);
+
+    string y;
+    assert(db.get(123, y));
+    assert(y == "blah");
+
     db.close;
 }
