@@ -15,6 +15,7 @@
 module leveldb.exceptions;
 
 private import std.conv : to;
+private import std.exception : enforceEx;
 
 /**
  * Base Exception type for library.  We don't do anything fancy, just have a common
@@ -23,14 +24,19 @@ private import std.conv : to;
 class LeveldbException : Exception
 {
     /// LevelDB returns errors as an internal char*
-    this(char* errptr, string file = __FILE__, size_t line = __LINE__, Throwable next = null)
-    {
+    this(const(char*) errptr, string file = __FILE__, size_t line = __LINE__, Throwable next = null) {
         super(to!string(errptr), file, line, next);
     }
 
     /// Take regular D strings for errors
-    this(string errstr, string file = __FILE__, size_t line = __LINE__, Throwable next = null)
-    {
+    this(string errstr, string file = __FILE__, size_t line = __LINE__, Throwable next = null) {
         super(errstr, file, line, next);
     }
+
+    /// Take regular D strings for errors
+    this(string file = __FILE__, size_t line = __LINE__, Throwable next = null) {
+        super("Unknown error",file, line, next);
+    }
 }
+
+alias dbEnforce = enforceEx!LeveldbException;

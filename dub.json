@@ -3,13 +3,30 @@
     "description": "D LevelDB interface",
     "homepage": "https://github.com/bheads/d-leveldb",
     "copyright": "Copyright © 2014, Byron Heads",
+    "license": "BSL-1.0",
+    "description": "A Leveldb implementation for D.",
+    
     "authors": [
         "Byron Heads"
     ],
+
     "dependencies": {
         "leveldb" : ">=1.16.0"
     },
-    "license": "BSL-1.0",
-    "description": "A Leveldb implementation for D.",
-    "targetType" : "library",
+
+    "configurations": [
+        { 
+            "name": "library",
+            "targetType" : "library"
+
+        },
+        {
+            "name": "test",
+            "targetType" : "executable",
+            "dflags" : ["-unittest", "-debug", "-main"],
+            "dependencies" : { 
+                "msgpack-d" : "~master"
+            }
+        }
+    ]
 }

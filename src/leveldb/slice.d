@@ -13,6 +13,7 @@
  *          http://www.boost.org/LICENSE_1_0.txt)
  */
 module leveldb.slice;
+/+
 
 private import leveldb.exceptions;
 private import std.traits : isArray, isStaticArray, isDynamicArray,
@@ -274,3 +275,5 @@ unittest
     assert(s1.length == int.sizeof);
     assert(s1.as!int == 999);
 }
+
++/

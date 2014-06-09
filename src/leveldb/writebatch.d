@@ -14,6 +14,7 @@
  *          http://www.boost.org/LICENSE_1_0.txt)
  */
 module leveldb.writebatch;
+/+
 
 private import  leveldb.exceptions,
                 leveldb.slice;
@@ -109,3 +110,4 @@ void batchDel(void* state, const char* k, size_t klen)
     auto visitor = cast(WriteBatch.Visitor*)state;
     visitor.dels(Slice(cast(void*)k, klen, true));
 }
++/

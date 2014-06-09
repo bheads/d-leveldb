@@ -1,3 +1,4 @@
+module leveldb.db;
 /**
  * D-LevelDB DateBase Object
  *
@@ -7,97 +8,65 @@
  * License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>.
  * Authors: Byron Heads
  *
- * Example:
- ---
- auto opt = new Options;
- opt.create_if_missing = true;
- auto db = new DB(opt, "/my/db/");
- db.put(Slice("PI"), Slice.Ref!double(3.14));
- double pi;
- enforce(db.get(Slice("PI"), pi));
- assert(pi == 3.14);
- ---
- * Todo: Add searching and transactions
+ * todo: add examples
 */
-/*          Copyright  © 2013 Byron Heads
+
+/**
+ *          Copyright  © 2013 Byron Heads
  * Distributed under the Boost Software License, Version 1.0.
  *    (See accompanying file LICENSE_1_0.txt or copy at
  *          http://www.boost.org/LICENSE_1_0.txt)
  */
-module leveldb.db;
 
-private import std.string : toStringz;
-private import std.conv : to;
-private import std.traits : isPointer, isArray;
-private import std.c.string : memcpy;
-private import core.memory : GC;
-
-// Use the temp space for unittesting
-version(unittest)
-{
-    private import std.file : 
-        tempDir, mkdirRecurse, rmdirRecurse ;
-    private import std.stdio;
-
-    const __gshared const(string) tempPath;
-    static this()
-    {
-        tempPath = tempDir() ~ `/unittest_d_leveldb/`;
-        try
-        {
-            writeln("Temp Path: ", tempPath);
-            mkdirRecurse(tempPath);
-        } catch(Exception e) {}
-    }
-
-    static ~this()
-    {
-        try
-        {
-            rmdirRecurse(tempPath);
-        } catch(Exception e) {}
-    }
-}
-
-private import
-    leveldb.exceptions,
-    leveldb.slice,
-    leveldb.writebatch,
+private:
+import deimos.leveldb.leveldb, 
+    leveldb.exceptions, 
+    leveldb.slice, 
+    leveldb.writebatch, 
     leveldb.options;
 
-private import deimos.leveldb.leveldb;
+import std.string : toStringz;
+import std.traits;
+
+enum isPrimitive(T) = (isSomeString!T || isNumeric!T || isBoolean!T || isSomeChar!T);
+
+
+const(char*) ptr(T)(ref T t)
+    if(isNumeric!T || isBoolean!T || isSomeChar!T)
+{
+    return cast(const(char*))&t;
+}
+
+public:
 
 /**
  * LevelDB DB
  * 
  * Throws: LeveldbException on errors
  */
-class DB
+struct DB(alias pack, alias unpack)
 {
 private:
     leveldb_t _db;  /// Internal LevelDB Pointer
 
 public:
-    /** Create a new unconnected DB */
-    this()
-    {}
+    @disable this(); // removing default empty constructor
+    @disable this(this); // removing default empty constructor
 
     /**
      * Opens a new connection to a levelDB database on creation
      * 
      * Params:
+     *      path = path to the leveldb files, DBs are folders that contain db files
      *      opt = LevelDB Options, sets the db options
-     *      path = path to the leveldb files, each DB needs its own path
      * Throws: LeveldbException
      */
-    this(Options opt, string path)
-    {
-        open(opt, path);
+    this(string path, Options opt) {
+        open(path, opt);
     }
 
     /** Force database to close on destruction, cleans up library memory */
-    ~this()
-    {
+    ~this() {
         close();
     }
 
@@ -105,84 +74,116 @@ public:
      * Opens a new connection to a levelDB database
      * 
      * Params:
-     *      opt = LevelDB Options, sets the db options
      *      path = path to the leveldb files, each DB needs its own path
+     *      opt = LevelDB Options, sets the db options
      * Throws: LeveldbException
      */
-    void open(Options opt, string path)
-    {
+    @property final 
+    void open(string path, Options opt) {
         // Close the connection if we are trying to reopen the db
         close();
 
-        // Catch any leveldb errors
         char* errptr = null;
-        scope(failure) if(errptr) leveldb_free(errptr);
+        scope(exit) if(errptr !is null) leveldb_free(errptr);
 
         _db = leveldb_open(opt.ptr, toStringz(path), &errptr);
-        if(errptr) throw new LeveldbException(errptr);
-        if(!_db) throw new LeveldbException(`Failed to connect to '` ~ path ~ `', unknown reason`);
+
+        dbEnforce(errptr is null);
+        dbEnforce(_db !is null, `Failed to connect to '` ~ path ~ `', unknown reason`);
     }
 
     /**
      * Close DB connection, also frees _db pointer in leveldb lib
      */
-    @property
-    void close() nothrow
-    {
-        if(isOpen)
-        {
+    @property final
+    ref auto close() nothrow {
+        if(isOpen) {
             leveldb_close(_db);
             _db = null;
         }
+        return this;
     }
 
-    /**
-     * Inserts/Updates a given value at a given key.
-     *
-     * Example:
-     ---
-     auto opt = new Options;
-     opt.create_if_missing = true;
-     auto db = new DB(opt, "/my/db/");
-     db.put(Slice("User1"), "John Doe");
-     ---
-     * Throws: LeveldbException
-     */
-    void put(K, V)(in K key, in V val, const(WriteOptions) opt = DefaultWriteOptions)
+    @property final
+    ref auto del(K)(in K key, const(WriteOptions) opt = DefaultWriteOptions)
     {
-        if(!isOpen) throw new LeveldbException(`Not connected to a valid db`);
-
-        char* errptr = null;
-        scope(failure) if(errptr) leveldb_free(errptr);
-
-        leveldb_put(_db, opt.ptr, key._lib_obj_ptr__, key._lib_obj_size__, val._lib_obj_ptr__, val._lib_obj_size__, &errptr);
-        if(errptr) throw new LeveldbException(errptr);
-    }
-
-    /**
-     * Deletes a key from the db
-     *
-     * Example:
-     ---
-     auto opt = new Options;
-     opt.create_if_missing = true;
-     auto db = new DB(opt, "/my/db/");
-     db.put("User1", Slice("John Doe"));
-     db.del("User1");
-     ---
-     * Throws: LeveldbException
-     */
-    void del(T)(in T key, const(WriteOptions) opt = DefaultWriteOptions)
-    {
-        if(!isOpen) throw new LeveldbException(`Not connected to a valid db`);
+        dbEnforce(isOpen, "Not connected to a db");
         
         char* errptr = null;
-        scope(failure) if(errptr) leveldb_free(errptr);
+        scope(exit) if(errptr !is null) leveldb_free(errptr);
 
-        leveldb_delete(_db, opt.ptr, key._lib_obj_ptr__, key._lib_obj_size__, &errptr);
-        if(errptr) throw new LeveldbException(errptr);
+        static if(isPrimitive!K) {
+            leveldb_delete(_db, opt.ptr, key.ptr, K.sizeof, &errptr);
+        } else {
+            const(ubyte)[] keyBuf = pack!K(key);
+            leveldb_delete(_db, opt.ptr, keyBuf.ptr, keyBuf.length, &errptr);
+        }
+
+        dbEnforce(!errptr);
+        return this;
     }
 
+    final
+    ref auto put(K, V)(in K key, in V val, const(WriteOptions) opt = DefaultWriteOptions) {
+        dbEnforce(isOpen, "Not connected to a db");
+
+        char* errptr = null;
+        scope(exit) if(errptr !is null) leveldb_free(errptr);
+
+        static if(isPrimitive!K && isPrimitive!V) {
+            leveldb_put(_db, opt.ptr, key.ptr, K.sizeof, val.ptr, V.sizeof, &errptr);
+        } else static if (isPrimitive!K) {
+            const(ubyte)[] valBuf = pack!V(val);
+            leveldb_put(_db, opt.ptr, key.ptr, K.sizeof, valBuf.ptr, valBuf.length, &errptr);
+        } else static if (isPrimitive!V) {
+            const(ubyte)[] keyBuf = pack!K(key);
+            leveldb_put(_db, opt.ptr, keyBuf.ptr, keyBuf.length, val.ptr, V.sizeof, &errptr);
+        } else {
+            const(ubyte)[] keyBuf = pack!K(key);
+            const(ubyte)[] valBuf = pack!V(val);
+            leveldb_put(_db, opt.ptr, keyBuf.ptr, keyBuf.length, valBuf.ptr, valBuf.length, &errptr);
+        }
+
+        dbEnforce(!errptr);
+        return this;
+    }
+
+    final
+    V find(K, V)(in K key, lazy V def, const(ReadOptions) opt = DefaultReadOptions) {
+        dbEnforce(isOpen, "Not connected to a db");
+        
+        char* errptr = null;
+        scope(exit) if(errptr !is null) leveldb_free(errptr);
+
+        size_t vallen; // size of the return slice
+        char* valret; // return pointer
+        scope(exit) if(valret !is null) leveldb_free(valret); // make sure we clean this up
+
+        static if(isPrimitive!K) {
+            auto valptr = leveldb_get(_db, opt.ptr, key.ptr, K.sizeof, &vallen, &errptr);
+        } else {
+            const(ubyte)[] keyBuf = pack!K(key);
+            auto valret = leveldb_get(_db, opt.ptr, keyBuf.ptr, keyBuf.length, &vallen, &errptr);
+        }
+
+        dbEnforce(!errptr);
+
+        // Not in db return default
+        if(valret is null) {
+            return def;
+        }
+
+        static if(isSomeString!V) {
+            return cast(V)(cast(char[])(valret)[0..vallen]).dup;
+        } else static if(isPrimitive!V) {
+            return *(cast(V*)valret);
+        } else {
+            return unpack!V(cast(ubyte[])valret);
+        }
+    }
+
+
+    /+
     /**
      * finds an entry in the db or returns the default value
      * Example
@@ -372,17 +373,6 @@ public:
     {
         if(!isOpen) throw new LeveldbException(`Not connected to a valid db`);
         return new Iterator(opt);
-    }
-
-    /**
-     * Tests if the database is open
-     *
-     * Returns: true if there is an open database
-     */
-    @property
-    bool isOpen() inout nothrow
-    {
-        return _db !is null;
     }
 
     /**
@@ -680,334 +670,43 @@ public:
         leveldb_repair_db(opt.ptr, toStringz(path), &errptr);
         if(errptr) throw new LeveldbException(errptr);
     }
+    +/
+
+    /**
+     * Tests if the database is open
+     *
+     * Returns: true if there is an open database
+     */
+    @property final
+    bool isOpen() inout pure nothrow
+    {
+        return _db !is null;
+    }
 } // class DB
 
 
-// Basic open, write string close, open get string, del string, get it
-
-unittest
-{
+// Basic open, and close
+unittest {
+    import std.file, std.path;
     auto opt = new Options;
     opt.create_if_missing = true;
-    auto db = new DB(opt, tempPath ~ `s1`);
+    auto db = new DB!(null, null)(buildNormalizedPath(tempDir, "d-leveldb_unittest.db"), opt);
     assert(db.isOpen);
-    int i = 1234;
-    db.put("simple", i);
-    assert(i == 1234);
-    i = 0;
-    db.get("simple", i);
-    double x = 3.145;
-    assert(i == 1234);
-    db.put("simple", x);
-    x = 0;
-    db.get("simple", x);
-    assert(x == 3.145, x.to!string);
-    db.destroy;
+    assert(!db.close.isOpen);
 }
 
-unittest
-{
+// Putting in basic values
+unittest {
+    import std.file, std.path, std.stdio;
     auto opt = new Options;
-    string ret;
     opt.create_if_missing = true;
-    auto db = new DB(opt, tempPath ~ `s1`);
+    auto db = new DB!(null, null)(buildNormalizedPath(tempDir, "d-leveldb_unittest.db"), opt);
     assert(db.isOpen);
-    assert(Slice("World")._lib_obj_size__ == "World"._lib_obj_size__);
-    assert(Slice("World")._lib_obj_size__ == 5);
-    ret = "World";
-    db.put(Slice("Hello"), ret);
-    ret = "";
-    assert(db.get_slice(Slice("Hello")).as!string == "World");
-    assert(db.get(Slice("Hello"), ret));
-    assert(ret == "World");
-    db.close;
-    assert(!db.isOpen);
-    db.open(opt, tempPath ~ `s1`);
-    assert(db.isOpen);
-    assert(db.get(Slice("Hello"), ret));
-    assert(ret == "World");
-    db.del("Hello");
-    assert(!db.get(Slice("Hello"), ret));
-    assert(ret != "World");
-    destroy(db); // force destructor to be called
-    db.destroyDB(opt, tempPath ~ `s1`);
+    db.put("testing", 123).put(123, "blah");
+    writeln(db.find("testing", 0));
+    assert(db.find(123, "") == "blah");
+    db.del(123);
+    assert(db.find(123, "") == "");
+    assert(db.find("testing", 5566) == 123);
+    assert(!db.close.isOpen);
 }
-
-unittest
-{
-    auto opt = new Options;
-    opt.create_if_missing = true;
-    auto db = new DB(opt, tempPath ~ `s1`);
-    assert(db.isOpen);
-    db.put("Hello", "World");
-    db.close;
-    assert(!db.isOpen);
-    db.open(opt, tempPath ~ `s1`);
-    assert(db.isOpen);
-    string ret;
-    assert(db.get(Slice("Hello"), ret));
-    assert(ret == "World");
-    db.del(Slice("Hello"));
-    assert(!db.get(Slice("Hello"), ret));
-    assert(ret != "World");
-    destroy(db); // force destructor to be called
-}
-
-// Test raw get
-unittest
-{
-    import std.math;
-    auto opt = new Options;
-    opt.create_if_missing = true;
-    auto db = new DB(opt, tempPath ~ `s1`);
-    auto pi = PI;
-    db.put(Slice("PI"), Slice(pi));
-    assert(db.get(Slice("PI"), pi));
-    assert(pi == PI);
-    assert(!db.get_slice("PI2").ok);
-    auto pi2 = db.get_slice(Slice("PI"));
-    assert(pi2.ok);
-    assert(pi2.length == pi.sizeof);
-    assert(pi2.as!real == pi);
-}
-
-// Test raw get
-unittest
-{
-    auto opt = new Options;
-    opt.create_if_missing = true;
-    auto db = new DB(opt, tempPath ~ `s4`);
-    db.put(Slice("SCORE"), Slice.Ref(234L));
-    long pi;
-    assert(db.get("SCORE", pi));
-    assert(pi == 234);
-    assert(!db.get_slice("SCORE2").ok);
-    auto pi2 = db.get_slice(Slice("SCORE"));
-    assert(pi2.ok);
-    assert(pi2.length == pi.sizeof);
-    assert(pi2.as!long == 234L);
-}
-
-// test structs as key and value
-unittest
-{
-    struct Point
-    {
-        double x, y;
-    }
-
-    import std.uuid;
-    auto uuid = randomUUID();
-
-    auto opt = new Options;
-    opt.create_if_missing = true;
-    auto db = new DB(opt, tempPath ~ `s2`);
-    auto p = Point(55, 44);
-    Point p2;
-    db.put(Slice(uuid.data), Slice(p));
-    auto o1 = db.get_slice(Slice(uuid.data));
-    assert(o1.as!Point.x == p.x);
-    assert(o1.as!Point.y == p.y);
-    assert(db.get(Slice(uuid.data), p2));
-    auto o2 = db.get_slice(uuid.data);
-    db.del(uuid.data);
-    GC.collect();
-    assert(p2.x == p.x);
-    assert(p2.y == p.y);
-    assert(!db.get(uuid.data, p2));
-}
-
-unittest
-{
-    auto opt = new Options;
-    opt.create_if_missing = true;
-    auto db = new DB(opt, tempPath ~ `wb1`);
-
-    db.put(Slice("Joe"), Slice.Ref(25));
-    db.put(Slice("Sally"), Slice.Ref(905));
-    assert(db.get_slice("Joe").as!int == 25);
-    assert(db.get_slice(Slice("Sally")).as!int == 905);
-
-    auto joe = db.get_slice(Slice("Joe")).as!int - 10;
-    auto sally = db.get_slice(Slice("Sally")).as!int + 10;
-
-    auto wb = new WriteBatch();
-    wb.put(Slice("Joe"), joe);
-    wb.put("Sally", Slice(sally));
-    assert(db.get_slice(Slice("Joe")).as!int == 25);
-    assert(db.get_slice("Sally").as!int == 905);
-    wb.clear;
-    db.write(wb);
-    assert(db.get_slice(Slice("Joe")).as!int == 25);
-    assert(db.get_slice("Sally").as!int == 905);
-    wb.put("Joe", joe);
-    wb.put(Slice("Sally"), Slice(sally));
-    db.write(wb);
-    assert(db.get_slice("Joe").as!int == joe);
-    assert(db.get_slice("Sally").as!int == sally);
-}
-
-unittest
-{
-    auto opt = new Options;
-    opt.create_if_missing = true;
-    auto db = new DB(opt, tempPath ~ `wb2`);
-
-    db.put("A", 1);
-    db.put("B", 1);
-    assert(db.get_slice("A").ok);
-    assert(db.get_slice("B").ok);
-    auto wb = new WriteBatch();
-    wb.del("A");
-    assert(db.get_slice("A").ok);
-    assert(db.get_slice("B").ok);
-    db.write(wb);
-    assert(!db.get_slice("A").ok);
-    assert(db.get_slice("B").ok);
-    db.put("A", 1);
-    wb.clear;
-    wb.del(Slice("B"));
-    assert(db.get_slice("A").ok);
-    assert(db.get_slice("B").ok);
-    db.write(wb);
-    assert(db.get_slice("A").ok);
-    assert(!db.get_slice("B").ok);
-}
-
-unittest
-{
-    auto opt = new Options;
-    opt.create_if_missing = true;
-    DB.destroyDB(opt, tempPath ~ `ss1`);
-    auto db = new DB(opt, tempPath ~ `ss1`);
-    auto snap = db.snapshot;
-    assert(snap);
-    db.put(Slice("Future"), "Stuff");
-    auto ro = new ReadOptions;
-    ro.snapshot(snap);
-    string str;
-    assert(db.get(Slice("Future"), str));
-    assert(str == "Stuff");
-    assert(!db.get("Future", str, ro));
-    assert(str == "");
-    assert(db.get("Future", str));
-    snap = db.snapshot;
-    ro.snapshot(snap);
-    assert(db.get("Future", str, ro));
-}
-
-unittest
-{
-    auto opt = new Options;
-    opt.create_if_missing = true;
-    DB.destroyDB(opt, tempPath ~ `it1/`);
-    auto db = new DB(opt, tempPath ~ `it1/`);
-    db.put(Slice("Hello"), Slice("World"));
-
-    auto it = db.iterator;
-    foreach(Slice key, Slice value; it)
-    {
-        assert(key.as!string == "Hello");
-        assert(value.as!string == "World");
-    }
-    foreach_reverse(Slice key, Slice value; it)
-    {
-        assert(key.as!string == "Hello");
-        assert(value.as!string == "World");
-    }
-
-    db.put(1, Slice.Ref(1));
-    it = db.iterator;
-    for(it.seek(Slice.Ref(1)); it.valid; it.next)
-    {
-        assert(it.key.ok);
-        assert(it.value.ok);
-    }
-
-    it = db.iterator;
-    for(it.seek(1); it.valid; it.next)
-    {
-        assert(it.key.ok);
-        assert(it.value.ok);
-    }
-}
-
-unittest
-{
-    auto opt = new Options;
-    opt.create_if_missing = true;
-    DB.destroyDB(opt, tempPath ~ `it2`);
-    auto db = new DB(opt, tempPath ~ `it2/`);
-    assert(db.isOpen);
-    foreach(int i; 1..10)
-    {
-        db.put(i, i*2);
-    }
-    auto it = db.iterator;
-    
-    foreach(Slice key, Slice value; it)
-    {
-        assert(value.as!int == key.as!int * 2);
-    }
-    foreach_reverse(Slice key, Slice value; it)
-    {
-        assert(value.as!int == key.as!int * 2);
-    }
-}
-
-unittest
-{
-    auto opt = new Options;
-    opt.create_if_missing = true;
-    DB.destroyDB(opt, tempPath ~ `it3/`);
-    auto db = new DB(opt, tempPath ~ `it3/`);
-    db.put("Hello", "World");
-
-    foreach(Slice key, Slice value; db)
-    {
-        assert(key.as!string == "Hello");
-        assert(value.as!string == "World");
-    }
-    foreach_reverse(Slice key, Slice value; db)
-    {
-        assert(key.as!string == "Hello");
-        assert(value.as!string == "World");
-    }
-}
-
-unittest
-{
-    auto opt = new Options;
-    opt.create_if_missing = true;
-    DB.destroyDB(opt, tempPath ~ `it4`);
-    auto db = new DB(opt, tempPath ~ `it4/`);
-    assert(db.isOpen);
-    foreach(int i; 1..10)
-    {
-        db.put(Slice(i), i*2);
-    }
-    foreach(Slice key, Slice value; db)
-    {
-        assert(value.as!int == key.as!int * 2);
-    }
-    foreach_reverse(Slice key, Slice value; db)
-    {
-        assert(value.as!int == key.as!int * 2);
-    }
-}
-
-
-unittest
-{
-    auto opt = new Options;
-    opt.create_if_missing = true;
-    DB.destroyDB(opt, tempPath ~ `find`);
-    auto db = new DB(opt, tempPath ~ `find/`);
-    assert(db.isOpen);
-    db.put("i1", "blah1.png");
-    db.put("i2", "blah2.png");
-    assert(db.find("i1", "null.png") == "blah1.png");
-    assert(db.find("i2", "null.png") == "blah2.png");
-    assert(db.find("i3", "null.png") == "null.png");
-}
-

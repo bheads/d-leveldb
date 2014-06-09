@@ -14,16 +14,17 @@
  */
 module leveldb.options;
 
-private import std.algorithm : cmp;
-private import std.string : toStringz;
+private:
+    import std.algorithm : cmp;
+    import std.string : toStringz;
 
-private import leveldb.exceptions;
-
-private import deimos.leveldb.leveldb;
+    import deimos.leveldb.leveldb,
+        leveldb.exceptions;
 
 /// Create default init read and write options
-public __gshared const(ReadOptions) DefaultReadOptions;
-public __gshared const(WriteOptions) DefaultWriteOptions;
+public:
+    __gshared const(ReadOptions) DefaultReadOptions;
+    __gshared const(WriteOptions) DefaultWriteOptions;
 
 shared static this()
 {
@@ -57,8 +58,7 @@ public:
     /// Create the internal option object
     this()
     {
-        if((_opt = leveldb_options_create()) is null)
-            throw new LeveldbException("Failed to create an option");
+        _opt = dbEnforce(leveldb_options_create(), "Failed to create an option");
     }
 
     /// Destroy any valid option pointer
@@ -263,8 +263,7 @@ public:
     public:
         this()
         {
-            if((_env = leveldb_create_default_env()) is null)
-                throw new LeveldbException("Failed to create leveldb environment");
+            _env = dbEnforce(leveldb_create_default_env(), "Failed to create leveldb environment");
         }
 
         ~this()
@@ -295,8 +294,7 @@ public:
 
         this(size_t capacity)
         {
-            if((_cache = leveldb_cache_create_lru(capacity)) is null)
-                throw new LeveldbException("Failed to create leveldb cache");
+            _cache = dbEnforce(leveldb_cache_create_lru(capacity), "Failed to create leveldb cache");
         }
 
         ~this()
@@ -333,8 +331,7 @@ public:
 
         this(int bits_per_key)
         {
-            if((_filter = leveldb_filterpolicy_create_bloom(bits_per_key)) is null)
-                throw new LeveldbException("Failed to create leveldb bloom filter");
+            _filter = dbEnforce(leveldb_filterpolicy_create_bloom(bits_per_key), "Failed to create leveldb bloom filter");
         }
 
         ~this()
@@ -359,9 +356,7 @@ public:
 
         this()
         {
-            if((_filter = leveldb_filterpolicy_create(cast(void*)this,
-                &filterDestructor, &filterCreate, &filterKeyMayMatch, &filterName)) is null)
-                throw new LeveldbException("Failed to create leveldb filter");
+            _filter = dbEnforce(leveldb_filterpolicy_create(cast(void*)this, &filterDestructor, &filterCreate, &filterKeyMayMatch, &filterName), "Failed to create leveldb filter");
         }
 
         ~this()
@@ -392,9 +387,7 @@ public:
 
         this()
         {
-            if((_comp = leveldb_comparator_create(cast(void*)this, 
-                &compareDestructor, &compareCompare, &compareName)) is null)
-                throw new LeveldbException("Failed to create leveldb comparator");
+            _comp = dbEnforce(leveldb_comparator_create(cast(void*)this, &compareDestructor, &compareCompare, &compareName), "Failed to create leveldb comparator");
         }
 
         ~this()
@@ -441,8 +434,7 @@ public:
     /// Create the internal option object
     this()
     {
-        if((_opt = leveldb_readoptions_create()) is null)
-            throw new LeveldbException("Failed to create an read options");
+        _opt = dbEnforce(leveldb_readoptions_create(),"Failed to create an read options");
     }
 
     /// Destroy any valid option pointer
@@ -512,8 +504,7 @@ public:
     /// Create the internal option object
     this()
     {
-        if((_opt = leveldb_writeoptions_create()) is null)
-            throw new LeveldbException("Failed to create an read options");
+        _opt = dbEnforce(leveldb_writeoptions_create(), "Failed to create an read options");
     }
 
     /// Destroy any valid option pointer
