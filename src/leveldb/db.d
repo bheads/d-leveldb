@@ -25,6 +25,8 @@ import deimos.leveldb.leveldb,
     leveldb.writebatch, 
     leveldb.options;
 
+debug import std.stdio : writeln;
+
 import std.string : toStringz;
 import std.traits;
 
@@ -35,6 +37,14 @@ const(char*) ptr(T)(ref T t)
     if(isNumeric!T || isBoolean!T || isSomeChar!T)
 {
     return cast(const(char*))&t;
+}
+
+size_t size(T)(ref T t) {
+    static if(isSomeString!T) {
+        return t.length ? t[0].sizeof * t.length : 0;
+    } else {
+        return T.sizeof;
+    }
 }
 
 public:
@@ -86,7 +96,7 @@ public:
         char* errptr = null;
         scope(exit) if(errptr !is null) leveldb_free(errptr);
 
-        _db = leveldb_open(opt.ptr, toStringz(path), &errptr);
+        _db = leveldb_open(opt.ptr, path.toStringz, &errptr);
 
         dbEnforce(errptr is null);
         dbEnforce(_db !is null, `Failed to connect to '` ~ path ~ `', unknown reason`);
@@ -96,7 +106,7 @@ public:
      * Close DB connection, also frees _db pointer in leveldb lib
      */
     @property final
-    ref auto close() nothrow {
+    auto ref close() nothrow {
         if(isOpen) {
             leveldb_close(_db);
             _db = null;
@@ -105,7 +115,7 @@ public:
     }
 
     @property final
-    ref auto del(K)(in K key, const(WriteOptions) opt = DefaultWriteOptions)
+    auto ref del(K)(in K key, const(WriteOptions) opt = DefaultWriteOptions)
     {
         dbEnforce(isOpen, "Not connected to a db");
         
@@ -113,7 +123,7 @@ public:
         scope(exit) if(errptr !is null) leveldb_free(errptr);
 
         static if(isPrimitive!K) {
-            leveldb_delete(_db, opt.ptr, key.ptr, K.sizeof, &errptr);
+            leveldb_delete(_db, opt.ptr, key.ptr, key.size, &errptr);
         } else {
             const(ubyte)[] keyBuf = pack!K(key);
             leveldb_delete(_db, opt.ptr, keyBuf.ptr, keyBuf.length, &errptr);
@@ -124,17 +134,17 @@ public:
     }
 
     final
-    ref auto put(K, V)(in K key, in V val, const(WriteOptions) opt = DefaultWriteOptions) {
+    auto ref put(K, V)(in K key, in V val, const(WriteOptions) opt = DefaultWriteOptions) {
         dbEnforce(isOpen, "Not connected to a db");
 
         char* errptr = null;
         scope(exit) if(errptr !is null) leveldb_free(errptr);
 
         static if(isPrimitive!K && isPrimitive!V) {
-            leveldb_put(_db, opt.ptr, key.ptr, K.sizeof, val.ptr, V.sizeof, &errptr);
+            leveldb_put(_db, opt.ptr, key.ptr, key.size, val.ptr, val.size, &errptr);
         } else static if (isPrimitive!K) {
             const(ubyte)[] valBuf = pack!V(val);
-            leveldb_put(_db, opt.ptr, key.ptr, K.sizeof, valBuf.ptr, valBuf.length, &errptr);
+            leveldb_put(_db, opt.ptr, key.ptr, key.size, valBuf.ptr, valBuf.length, &errptr);
         } else static if (isPrimitive!V) {
             const(ubyte)[] keyBuf = pack!K(key);
             leveldb_put(_db, opt.ptr, keyBuf.ptr, keyBuf.length, val.ptr, V.sizeof, &errptr);
@@ -156,15 +166,14 @@ public:
         scope(exit) if(errptr !is null) leveldb_free(errptr);
 
         size_t vallen; // size of the return slice
-        char* valret; // return pointer
-        scope(exit) if(valret !is null) leveldb_free(valret); // make sure we clean this up
 
         static if(isPrimitive!K) {
-            auto valptr = leveldb_get(_db, opt.ptr, key.ptr, K.sizeof, &vallen, &errptr);
+            auto valret = leveldb_get(_db, opt.ptr, key.ptr, key.size, &vallen, &errptr);
         } else {
             const(ubyte)[] keyBuf = pack!K(key);
             auto valret = leveldb_get(_db, opt.ptr, keyBuf.ptr, keyBuf.length, &vallen, &errptr);
         }
+        scope(exit) if(valret !is null) leveldb_free(valret); // make sure we clean this up
 
         dbEnforce(!errptr);
 
@@ -174,7 +183,7 @@ public:
         }
 
         static if(isSomeString!V) {
-            return cast(V)(cast(char[])(valret)[0..vallen]).dup;
+            return (cast(V)valret[0..vallen]).dup;
         } else static if(isPrimitive!V) {
             return *(cast(V*)valret);
         } else {
@@ -184,133 +193,6 @@ public:
 
 
     /+
-    /**
-     * finds an entry in the db or returns the default value
-     * Example
-     ---
-     auto opt = new Options;
-     opt.create_if_missing = true;
-     auto db = new DB(opt, "/my/db/");
-     db.put("user_1245_name", "John Smith);
-     assert(db.find("user_1245_name", "") == "John Smith");
-     ---
-     * Throws: LeveldbException
-     */
-    V find(K, V)(in K key, V def, const(ReadOptions) opt = DefaultReadOptions)
-        if(!is(V == interface))
-    {
-        if(!isOpen) throw new LeveldbException(`Not connected to a valid db`);
-
-        char* errptr = null;
-        scope(failure) if(errptr) leveldb_free(errptr);
-
-        size_t vallen;
-        auto valptr = leveldb_get(_db, opt.ptr, key._lib_obj_ptr__, key._lib_obj_size__, &vallen, &errptr);
-        scope(exit) if(valptr !is null) leveldb_free(valptr);
-        if(errptr) throw new LeveldbException(errptr);
-        if(valptr is null) return def;
-
-        static if(isSomeString!V || isArray!V)
-	{
-            return cast(V)(cast(char[])(valptr)[0..vallen]).dup;
-	}
-        else static if(is(V == class))
-        {
-            if(typeid(V).sizeof > vallen)
-                throw new LeveldbException("Assignment size is larger then data size");
-            return *(cast(V*)valptr).dup;
-        }
-        else
-        {
-            if(V.sizeof > vallen)
-                throw new LeveldbException("Assignment size is larger then slice data size");
-            return *(cast(V*)valptr);
-        }
-    }
-
-    /**
-     * Gets an entry from the DB
-     *
-     * Only accepts an array for the key.
-     * V must be convertable from char array.
-     *
-     * Example:
-     ---
-     auto opt = new Options;
-     opt.create_if_missing = true;
-     auto db = new DB(opt, "/my/db/");
-     db.put("User1", Slice("John Doe"));
-     string name;
-     enforce(db.get("User1", name));
-     assert(name == "John Doe");
-     ---
-     * Throws: LeveldbException
-     * Returns: true if the key was found in the DB
-     */
-    bool get(T, V)(in T key, out V value, const(ReadOptions) opt = DefaultReadOptions)
-        if(!is(V == interface))
-    {
-        if(!isOpen) throw new LeveldbException(`Not connected to a valid db`);
-
-        char* errptr = null;
-        scope(failure) if(errptr) leveldb_free(errptr);
-
-        size_t vallen;
-        auto valptr = leveldb_get(_db, opt.ptr, key._lib_obj_ptr__, key._lib_obj_size__, &vallen, &errptr);
-        scope(exit) if(valptr !is null) leveldb_free(valptr);
-        if(errptr) throw new LeveldbException(errptr);
-        if(valptr is null) return false;
-
-        static if(isSomeString!V || isArray!V)
-	{
-            value = cast(V)(cast(char[])(valptr)[0..vallen]).dup;
-	}
-        else static if(is(V == class))
-        {
-            if(typeid(V).sizeof > vallen)
-                throw new LeveldbException("Assignment size is larger then data size");
-            value = *(cast(V*)valptr).dup;
-        }
-        else
-        {
-            if(V.sizeof > vallen)
-                throw new LeveldbException("Assignment size is larger then slice data size");
-            value = *(cast(V*)valptr);
-        }
-
-        return true;
-    }
-
-    /**
-     * Gets an entry from the DB as a Slice.
-     *
-     * Example:
-     ---
-     auto opt = new Options;
-     opt.create_if_missing = true;
-     auto db = new DB(opt, "/my/db/");
-     auto uuid = UUID("8AB3060E-2cba-4f23-b74c-b52db3bdfb46");
-     db.put("My UUID", uuid.data);
-     auto name = db.get_slice("My UUID");
-     assert(name.as!UUID == uuid);
-     ---
-     * Throws: LeveldbException
-     * Returns: A Slice struct, this holds the returned pointer and size
-     * Slice will safely clean up the result
-     */
-    auto get_slice(T)(T key, const(ReadOptions) opt = DefaultReadOptions)
-    {
-        if(!isOpen) throw new LeveldbException(`Not connected to a valid db`);
-
-        char* errptr = null;
-        scope(failure) if(errptr) leveldb_free(errptr);
-
-        size_t vallen;
-        void* val = leveldb_get(_db, opt.ptr, key._lib_obj_ptr__, key._lib_obj_size__, &vallen, &errptr);
-        scope(failure) if(val) leveldb_free(val);
-        if(errptr) throw new LeveldbException(errptr);
-        return Slice(val, vallen, true);
-    }
 
     /**
      * Sublmits a BatchWrite to the DB.
@@ -646,30 +528,6 @@ public:
             return result;
         }
     } //Iterator
-
-    /**
-     * Destory/delete a non-locked leveldb
-     */
-    static void destroyDB(const Options opt, string path)
-    {
-        char* errptr = null;
-        scope(exit) if(errptr) leveldb_free(errptr);
-        leveldb_destroy_db(opt.ptr, toStringz(path), &errptr);
-        if(errptr) throw new LeveldbException(errptr);
-    }
-
-    /**
-     * Attempt to repair a non-locked leveldb
-     */
-
-    static void repairDB(const Options opt, string path)
-    {
-        char* errptr = null;
-        scope(exit) if(errptr) leveldb_free(errptr);
-
-        leveldb_repair_db(opt.ptr, toStringz(path), &errptr);
-        if(errptr) throw new LeveldbException(errptr);
-    }
     +/
 
     /**
@@ -681,6 +539,33 @@ public:
     bool isOpen() inout pure nothrow
     {
         return _db !is null;
+    }
+
+    /**
+     * Destory/delete a non-locked leveldb
+     */
+    static final
+    void destroy(in string path, const(Options) opt) {
+        char* errptr = null;
+        scope(exit) if(errptr) leveldb_free(errptr);
+
+        leveldb_destroy_db(opt.ptr, toStringz(path), &errptr);
+        
+        dbEnforce(!errptr);
+    }
+
+    /**
+     * Attempt to repair a non-locked leveldb
+     */
+    static final
+    void repair(const Options opt, string path)
+    {
+        char* errptr = null;
+        scope(exit) if(errptr) leveldb_free(errptr);
+
+        leveldb_repair_db(opt.ptr, toStringz(path), &errptr);
+
+        dbEnforce(!errptr);
     }
 } // class DB
 
@@ -695,18 +580,24 @@ unittest {
     assert(!db.close.isOpen);
 }
 
-// Putting in basic values
+// Putting in basic values and getting them back
 unittest {
-    import std.file, std.path, std.stdio;
+    import std.file, std.path;
     auto opt = new Options;
     opt.create_if_missing = true;
     auto db = new DB!(null, null)(buildNormalizedPath(tempDir, "d-leveldb_unittest.db"), opt);
     assert(db.isOpen);
     db.put("testing", 123).put(123, "blah");
-    writeln(db.find("testing", 0));
-    assert(db.find(123, "") == "blah");
-    db.del(123);
-    assert(db.find(123, "") == "");
     assert(db.find("testing", 5566) == 123);
+    db.del("testing").del("nottesting");
+    assert(db.find("testing", 5566) == 5566);
+    db.put('a', 35.46);
+    assert(db.find('a', 5566.36) == 35.46);
+    assert(db.find(123, "null") == "blah", "|" ~ db.find(123, "null") ~ "| != " ~ "blah");
+    db.del(123);
+    assert(db.find(123, "null") == "null");
     assert(!db.close.isOpen);
+    db = new DB!(null, null)(buildNormalizedPath(tempDir, "d-leveldb_unittest.db"), opt);
+    assert(db.find(123, "null") == "null");
+    db.close;
 }

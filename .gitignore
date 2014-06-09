@@ -7,3 +7,4 @@
 *.exe
 dub.selections.json
 dub.userprefs
+d-leveldb
