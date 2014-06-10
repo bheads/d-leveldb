@@ -30,23 +30,6 @@ debug import std.stdio : writeln;
 import std.string : toStringz;
 import std.traits;
 
-enum isPrimitive(T) = (isSomeString!T || isNumeric!T || isBoolean!T || isSomeChar!T);
-
-
-const(char*) ptr(T)(ref T t)
-    if(isNumeric!T || isBoolean!T || isSomeChar!T)
-{
-    return cast(const(char*))&t;
-}
-
-size_t size(T)(ref T t) {
-    static if(isSomeString!T) {
-        return t.length ? t[0].sizeof * t.length : 0;
-    } else {
-        return T.sizeof;
-    }
-}
-
 public:
 
 /**
@@ -123,7 +106,8 @@ public:
         scope(exit) if(errptr !is null) leveldb_free(errptr);
 
         static if(isPrimitive!K) {
-            leveldb_delete(_db, opt.ptr, key.ptr, key.size, &errptr);
+            auto _key = Slice.make(key);
+            leveldb_delete(_db, opt.ptr, _key.cptr, _key.size, &errptr);
         } else {
             const(ubyte)[] keyBuf = pack!K(key);
             leveldb_delete(_db, opt.ptr, keyBuf.ptr, keyBuf.length, &errptr);
@@ -141,7 +125,9 @@ public:
         scope(exit) if(errptr !is null) leveldb_free(errptr);
 
         static if(isPrimitive!K && isPrimitive!V) {
-            leveldb_put(_db, opt.ptr, key.ptr, key.size, val.ptr, val.size, &errptr);
+            auto _key = Slice.make(key);
+            auto _val = Slice.make(val);
+            debug writeln(key, " - ", _key, " ", val, " - ", _val);
         } else static if (isPrimitive!K) {
             const(ubyte)[] valBuf = pack!V(val);
             leveldb_put(_db, opt.ptr, key.ptr, key.size, valBuf.ptr, valBuf.length, &errptr);
@@ -153,8 +139,10 @@ public:
             const(ubyte)[] valBuf = pack!V(val);
             leveldb_put(_db, opt.ptr, keyBuf.ptr, keyBuf.length, valBuf.ptr, valBuf.length, &errptr);
         }
-
+        leveldb_put(_db, opt.ptr, _key.cptr, _key.size, _val.cptr, _val.size, &errptr);
         dbEnforce(!errptr);
+        debug writeln("put ", _key.as!string, ", ", _val.as!string, " or ", _val.as!int, " - ", _val.size);
+
         return this;
     }
 
@@ -168,24 +156,21 @@ public:
         size_t vallen; // size of the return slice
 
         static if(isPrimitive!K) {
-            auto valret = leveldb_get(_db, opt.ptr, key.ptr, key.size, &vallen, &errptr);
+            auto _key = Slice.make(key);
         } else {
-            const(ubyte)[] keyBuf = pack!K(key);
-            auto valret = leveldb_get(_db, opt.ptr, keyBuf.ptr, keyBuf.length, &vallen, &errptr);
+            auto _key = Slice.make(pack!K(key));
         }
-        scope(exit) if(valret !is null) leveldb_free(valret); // make sure we clean this up
-
+        auto _val = Slice.make(leveldb_get(_db, opt.ptr, _key.cptr, _key.size, &vallen, &errptr), vallen, true);
         dbEnforce(!errptr);
+        debug writeln("find ", _key.as!string, ", ", _val.as!string, " or ", _val.as!int);
 
         // Not in db return default
-        if(valret is null) {
+        if(!_val.ok) {
             return def;
         }
 
-        static if(isSomeString!V) {
-            return (cast(V)valret[0..vallen]).dup;
-        } else static if(isPrimitive!V) {
-            return *(cast(V*)valret);
+        static if(isPrimitive!V) {
+            return _val.as!V;
         } else {
             return unpack!V(cast(ubyte[])valret);
         }
@@ -203,7 +188,8 @@ public:
         size_t vallen; // size of the return slice
 
         static if(isPrimitive!K) {
-            auto valret = leveldb_get(_db, opt.ptr, key.ptr, key.size, &vallen, &errptr);
+            auto _key = Slice.make(key);
+            auto valret = leveldb_get(_db, opt.ptr, _key.cptr, _key.size, &vallen, &errptr);
         } else {
             const(ubyte)[] keyBuf = pack!K(key);
             auto valret = leveldb_get(_db, opt.ptr, keyBuf.ptr, keyBuf.length, &vallen, &errptr);
