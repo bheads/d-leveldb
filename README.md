@@ -1,4 +1,4 @@
-#D-Leveldb
+#D-Leveldb [![Build Status](https://travis-ci.org/bheads/d-leveldb.svg)](https://travis-ci.org/bheads/d-leveldb)
 A Leveldb implementation for D.  Requires [leveldb deimos bindings](https://github.com/bheads/leveldb/).
 
 ##Example
