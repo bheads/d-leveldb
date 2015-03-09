@@ -10,7 +10,7 @@ void main()
     auto opt = new Options;
     opt.create_if_missing = true;
 
-    auto db = new DB(opt, "path_to_my.db");
+    auto db = new DB(opt, "path_to_my_db_folder");
     db.put("Hello", "World");
 
     assert(db.get_slice("Hello").as!string == "World");
