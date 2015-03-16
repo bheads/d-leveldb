@@ -30,7 +30,7 @@ void main()
 ##Leveldb Version: 1.16.0
 
 ### Installation
-Get this with [dub](http://registry.vibed.org/packages/d-leveldb).
+Get this with [dub](code.dlang.org/packages/d-leveldb).
 
 To use this package, put the following dependency into your project's package.json into the dependencies section:
 ```
