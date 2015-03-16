@@ -3,14 +3,14 @@ A Leveldb implementation for D.  Requires [leveldb deimos bindings](https://gith
 
 ##Example
 ```
-import etc.leveldb.leveldb;
+import leveldb, std.stdio;
 
 void main()
 {
     auto opt = new Options;
     opt.create_if_missing = true;
 
-    auto db = new DB(opt, "path/to/db");
+    auto db = new DB(opt, "path_to_my_db_folder");
     db.put("Hello", "World");
 
     assert(db.get_slice("Hello").as!string == "World");
@@ -25,7 +25,6 @@ void main()
             writeln(key.as!string, ": ", value.as!string);
     }
 }
-
 ```
 
 ##Leveldb Version: 1.16.0
