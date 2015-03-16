@@ -1,0 +1,10 @@
+install:
+  # U
+  - LEVELDB_VER=1.16
+  - curl -fsSL https://github.com/google/leveldb/archive/v${LEVELDB_VER}.tar.gz | tar -C ${HOME} -xzf -
+  - make -C ${HOME}/leveldb-${LEVELDB_VER} -j2
+  - export LIBRARY_PATH="${HOME}/leveldb-${LEVELDB_VER}:${LIBRARY_PATH}"
+  - export LD_LIBRARY_PATH="${HOME}/leveldb-${LEVELDB_VER}:${LD_LIBRARY_PATH}"
+
+language: d
+sudo: false
