@@ -1,0 +1,7 @@
+{
+	"fileVersion": 1,
+	"versions": {
+		"d-leveldb": "~master",
+		"leveldb": "1.16.0"
+	}
+}
