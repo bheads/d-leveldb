@@ -1,5 +1,5 @@
 {
-    "name": "d-leveldbComparator",
+    "name": "d-leveldb-comparator",
     "description": "D LevelDB interface",
     "homepage": "https://github.com/dgallion1/d-leveldb",
     "copyright": "Copyright © 2014, Byron Heads",
