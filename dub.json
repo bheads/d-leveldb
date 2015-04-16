@@ -1,15 +1,15 @@
 {
-    "name": "d-leveldb",
+    "name": "d-leveldb-comparator",
     "description": "D LevelDB interface",
-    "homepage": "https://github.com/bheads/d-leveldb",
+    "homepage": "https://github.com/dgallion1/d-leveldb",
     "copyright": "Copyright © 2014, Byron Heads",
     "authors": [
-        "Byron Heads"
+        "Byron Heads, Darrell Gallion"
     ],
     "dependencies": {
         "leveldb" : ">=1.16.0"
     },
     "license": "BSL-1.0",
-    "description": "A Leveldb implementation for D.",
+    "description": "A Leveldb implementation for D., Fixes for Comparator",
     "targetType" : "library",
 }

@@ -562,25 +562,25 @@ private:
 extern(C):
     void compareDestructor(void* state)
     {
-        auto c = cast(Options.Comparator*)state;
+        auto c = cast(Options.Comparator)state;
         c.destructor();
     }
 
     int compareCompare(void* state, const char* a, size_t alen, const char* b, size_t blen)
     {
-        auto c = cast(Options.Comparator*)state;
+        auto c = cast(Options.Comparator)state;
         return c.compare(a[0..alen], b[0..blen]);
     }
 
     const(char*) compareName(void* state)
     {
-        auto c = cast(Options.Comparator*)state;
+        auto c = cast(Options.Comparator)state;
         return toStringz(c.name());
     }
 
     void filterDestructor(void* state)
     {
-        auto f = cast(Options.AFilterPolicy*)state;
+        auto f = cast(Options.AFilterPolicy)state;
         f.destructor();
     }
 

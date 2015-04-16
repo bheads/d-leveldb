@@ -1,0 +1,9 @@
+{
+	"name": "lt",
+	"description": "A minimal D application.",
+	"copyright": "Copyright © 2015, darrell",
+	"authors": ["darrell"],
+	"dependencies": {
+    "d-leveldb": "~master"
+	}
+}
