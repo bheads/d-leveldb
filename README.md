@@ -3,7 +3,7 @@ A Leveldb implementation for D.  Requires [leveldb deimos bindings](https://gith
 
 Forked, to fix the use of custom comparators.
 
-##Comarator
+##Comparator
 ```
 class ComparatorDbKey: Options.Comparator
 {
