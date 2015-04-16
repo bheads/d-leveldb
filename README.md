@@ -1,6 +1,24 @@
 #D-Leveldb [![Build Status](https://travis-ci.org/bheads/d-leveldb.svg)](https://travis-ci.org/bheads/d-leveldb)
 A Leveldb implementation for D.  Requires [leveldb deimos bindings](https://github.com/bheads/leveldb/).
 
+Forked, to fix the use of custom comparators.
+
+##Comarator
+```
+class ComparatorDbKey: Options.Comparator
+{
+  override int compare(const char[] a, const char[] b) inout
+  {
+    immutable DbKey al = *cast(const DbKey*)a;
+    immutable DbKey bl = *cast(const DbKey*)b;
+
+    auto dTime   =  cast(int)(al.gTime - bl.gTime);
+    return dTime;
+  }
+}
+
+```
+
 ##Example
 ```
 import leveldb, std.stdio;
