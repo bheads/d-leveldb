@@ -29,7 +29,7 @@ module leveldb.db;
 private import std.string : toStringz;
 private import std.conv : to;
 private import std.traits : isPointer, isArray;
-private import std.c.string : memcpy;
+private import core.stdc.string : memcpy;
 private import core.memory : GC;
 
 // Use the temp space for unittesting
